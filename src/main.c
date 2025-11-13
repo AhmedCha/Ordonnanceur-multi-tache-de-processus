@@ -31,8 +31,7 @@ int main(int argc, char *argv[]) {
     Processus tab[100];
     int n = lire_fichier(argv[1], tab);
 
-    // Lister les politiques dans le dossier
-    DIR *dir = opendir("politiques");
+    DIR *dir = opendir("build/politiques");
     if (!dir) {
         perror("Erreur ouverture dossier politiques/");
         return 1;
@@ -44,7 +43,7 @@ int main(int argc, char *argv[]) {
 
     printf("\n=== Ordonnanceurs disponibles ===\n");
     while ((entry = readdir(dir)) != NULL) {
-        if (strstr(entry->d_name, ".so")) {  // fichiers .so uniquement
+        if (strstr(entry->d_name, ".so")) {  
             politiques[count] = strdup(entry->d_name);
             printf("%d. %s\n", count + 1, entry->d_name);
             count++;
@@ -66,14 +65,14 @@ int main(int argc, char *argv[]) {
     }
 
     char chemin[128];
-    snprintf(chemin, sizeof(chemin), "politiques/%s", politiques[choix - 1]);
+    snprintf(chemin, sizeof(chemin), "build/politiques/%s", politiques[choix - 1]);
     void *lib = dlopen(chemin, RTLD_LAZY);
     if (!lib) {
         fprintf(stderr, "Erreur chargement %s : %s\n", chemin, dlerror());
         return 1;
     }
 
-    // Chercher la fonction `ordonnancer`
+    
     void (*ordonnancer)(Processus[], int);
     *(void **)(&ordonnancer) = dlsym(lib, "ordonnancer");
 
