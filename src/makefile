@@ -24,7 +24,8 @@ build/politiques/%.so: politiques/%.c processus.h | build/politiques
 
 # Clean
 clean:
-	rm -rf build main
+	rm -rf main
+	rm -rf build
 
 # Rebuild
 re: clean all
