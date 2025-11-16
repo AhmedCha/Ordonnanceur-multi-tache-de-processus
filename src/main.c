@@ -3,6 +3,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <termios.h>
+#include <unistd.h>
 #include "processus.h"
 
 int lire_fichier(char *nomfichier, Processus tab[]) {
@@ -22,6 +24,51 @@ int lire_fichier(char *nomfichier, Processus tab[]) {
     return n;
 }
 
+int getch() {
+    struct termios oldt, newt;
+    int ch;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+}
+
+int menu_interactif(char *options[], int count) {
+    int selection = 0;   // Default selection
+    char c;
+
+    while (1) {
+        system("clear");
+        printf("=== Ordonnanceurs disponibles ===\n\n");
+
+        for (int i = 0; i < count; i++) {
+            if (i == selection)
+                printf(" > \033[32m%s\033[0m\n", options[i]);  // highlighted
+            else
+                printf("   %s\n", options[i]);
+        }
+
+        c = getch();
+
+        if (c == '\n') {           // ENTER
+            return selection;
+        } else if (c == 27) {      // ESC / arrow prefix
+            getch();               // skip '['
+            switch(getch()) {
+                case 'A':          // UP
+                    if (selection > 0) selection--;
+                    break;
+                case 'B':          // DOWN
+                    if (selection < count - 1) selection++;
+                    break;
+            }
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         printf("Usage: %s <fichier_configuration>\n", argv[0]);
@@ -31,7 +78,7 @@ int main(int argc, char *argv[]) {
     Processus tab[100];
     int n = lire_fichier(argv[1], tab);
 
-    DIR *dir = opendir("build/politiques");
+    DIR *dir = opendir("politiques");
     if (!dir) {
         perror("Erreur ouverture dossier politiques/");
         return 1;
@@ -41,11 +88,9 @@ int main(int argc, char *argv[]) {
     char *politiques[50];
     int count = 0;
 
-    printf("\n=== Ordonnanceurs disponibles ===\n");
     while ((entry = readdir(dir)) != NULL) {
-        if (strstr(entry->d_name, ".so")) {  
+        if (strstr(entry->d_name, ".so")) {
             politiques[count] = strdup(entry->d_name);
-            printf("%d. %s\n", count + 1, entry->d_name);
             count++;
         }
     }
@@ -56,23 +101,17 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int choix;
-    printf("\nChoisissez une politique : ");
-    scanf("%d", &choix);
-    if (choix < 1 || choix > count) {
-        printf("Choix invalide.\n");
-        return 1;
-    }
+    int choix_index = menu_interactif(politiques, count);
 
     char chemin[128];
-    snprintf(chemin, sizeof(chemin), "build/politiques/%s", politiques[choix - 1]);
+    snprintf(chemin, sizeof(chemin), "politiques/%s", politiques[choix_index]);
+
     void *lib = dlopen(chemin, RTLD_LAZY);
     if (!lib) {
         fprintf(stderr, "Erreur chargement %s : %s\n", chemin, dlerror());
         return 1;
     }
 
-    
     void (*ordonnancer)(Processus[], int);
     *(void **)(&ordonnancer) = dlsym(lib, "ordonnancer");
 
@@ -83,7 +122,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("\nExécution de la politique : %s\n", politiques[choix - 1]);
+    printf("\nExécution de la politique : %s\n", politiques[choix_index]);
     ordonnancer(tab, n);
 
     dlclose(lib);
