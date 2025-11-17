@@ -88,13 +88,30 @@ int main(int argc, char *argv[]) {
     char *politiques[50];
     int count = 0;
 
+    char *fifo_file = NULL; 
+
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, ".so")) {
-            politiques[count] = strdup(entry->d_name);
-            count++;
+
+            // Detect FIFO file first
+            if (strncmp(entry->d_name, "fifo", 4) == 0) {
+                fifo_file = strdup(entry->d_name);
+            } else {
+                politiques[count++] = strdup(entry->d_name);
+            }
         }
     }
     closedir(dir);
+
+    // Mettre FIFO par defaut s'il existe
+    if (fifo_file != NULL) {
+        for (int i = count; i > 0; i--) {
+            politiques[i] = politiques[i - 1];
+        }
+        politiques[0] = fifo_file;
+        count++;
+    }
+
 
     if (count == 0) {
         printf("Aucune politique trouvée dans le dossier.\n");
