@@ -1,60 +1,56 @@
 #include <stdio.h>
 #include "../processus.h"
 
-void ordonnancer(Processus tab[], int n) {
+void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     printf("===== Ordonnancement par Priorité Préemptive =====\n");
-
     int temps = 0;
-    int restant[n];
-    int termine = 0;
+    int temps_restant[nombre_processus];
+    int nb_termines = 0;
     int i;
 
-    for (i = 0; i < n; i++)
-        restant[i] = tab[i].duree;
+    for (i = 0; i < nombre_processus; i++)
+        temps_restant[i] = tableau_processus[i].duree;
 
-    int courant = -1;  // index du processus en cours
-    int debut_segment = 0;
+    int processus_courant = -1;
+    int debut_execution = 0;
 
-    while (termine < n) {
-        int idx = -1;
+    while (nb_termines < nombre_processus) {
+        int index_selectionne = -1;
         int max_priorite = -1;
 
-        // Chercher le processus prêt avec la priorité la plus élevée
-        for (i = 0; i < n; i++) {
-            if (tab[i].arrivee <= temps && restant[i] > 0) {
-                if (tab[i].priorite > max_priorite) {
-                    max_priorite = tab[i].priorite;
-                    idx = i;
+        for (i = 0; i < nombre_processus; i++) {
+            if (tableau_processus[i].arrivee <= temps && temps_restant[i] > 0) {
+                if (tableau_processus[i].priorite > max_priorite) {
+                    max_priorite = tableau_processus[i].priorite;
+                    index_selectionne = i;
                 }
             }
         }
 
-        if (idx == -1) {  // aucun processus prêt
+        if (index_selectionne == -1) {
             temps++;
             continue;
         }
 
-        // Préemption : si le processus change, afficher le segment précédent
-        if (courant != idx) {
-            if (courant != -1) {
+        if (processus_courant != index_selectionne) {
+            if (processus_courant != -1) {
                 printf("%s (priorité %d) s’exécute de %d à %d\n",
-                       tab[courant].nom, tab[courant].priorite,
-                       debut_segment, temps);
+                       tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
+                       debut_execution, temps);
             }
-            courant = idx;
-            debut_segment = temps;
+            processus_courant = index_selectionne;
+            debut_execution = temps;
         }
 
-        // Exécuter 1 unité
-        restant[courant]--;
+        temps_restant[processus_courant]--;
         temps++;
 
-        if (restant[courant] == 0) {  // Processus terminé
+        if (temps_restant[processus_courant] == 0) {
             printf("%s (priorité %d) s’exécute de %d à %d\n",
-                   tab[courant].nom, tab[courant].priorite,
-                   debut_segment, temps);
-            termine++;
-            courant = -1;
+                   tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
+                   debut_execution, temps);
+            nb_termines++;
+            processus_courant = -1;
         }
     }
 }

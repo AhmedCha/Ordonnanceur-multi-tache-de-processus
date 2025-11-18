@@ -1,16 +1,14 @@
-// processus.h
-#ifndef PROCESSUS_H
-#define PROCESSUS_H
+#ifndef PROCESS_H
+#define PROCESS_H
 
 typedef struct {
     char nom[20];
     int arrivee;
     int duree;
     int priorite;
-    int restant;  // utile pour round robin
+    int restant;
 } Processus;
 
-// Prototype commun pour toutes les politiques
-void ordonnancer(Processus tab[], int n);
+void ordonnancer(Processus tableau_processus[], int nombre_processus);
 
 #endif

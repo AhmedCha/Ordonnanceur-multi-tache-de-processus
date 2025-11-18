@@ -7,62 +7,65 @@
 #include <unistd.h>
 #include "processus.h"
 
-int lire_fichier(char *nomfichier, Processus tab[]) {
-    FILE *f = fopen(nomfichier, "r");
-    if (!f) { perror("Erreur fichier"); exit(1); }
+int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
+    FILE *fichier = fopen(chemin_fichier, "r");
+    if (!fichier) { perror("Erreur fichier"); exit(1); }
 
-    char ligne[100];
-    int n = 0;
-    while (fgets(ligne, sizeof(ligne), f)) {
-        if (ligne[0] == '#' || strlen(ligne) <= 1)
+    char ligne_lue[100];
+    int nb_processus = 0;
+    while (fgets(ligne_lue, sizeof(ligne_lue), fichier)) {
+        if (ligne_lue[0] == '#')
             continue;
-        sscanf(ligne, "%s %d %d %d",
-               tab[n].nom, &tab[n].arrivee, &tab[n].duree, &tab[n].priorite);
-        n++;
+        
+        int scanned = sscanf(ligne_lue, "%s %d %d %d",
+                             tableau_processus[nb_processus].nom, &tableau_processus[nb_processus].arrivee, &tableau_processus[nb_processus].duree, &tableau_processus[nb_processus].priorite);
+        
+        if (scanned == 4)
+            nb_processus++;
     }
-    fclose(f);
-    return n;
+    fclose(fichier);
+    return nb_processus;
 }
 
 int getch() {
     struct termios oldt, newt;
-    int ch;
+    int caractere_lu;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    ch = getchar();
+    caractere_lu = getchar();
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    return ch;
+    return caractere_lu;
 }
 
-int menu_interactif(char *options[], int count) {
-    int selection = 0;   // Default selection
-    char c;
+int menu_interactif(char *options[], int nombre_options) {
+    int index_selection = 0;
+    int caractere_lu;
 
     while (1) {
         system("clear");
         printf("=== Ordonnanceurs disponibles ===\n\n");
 
-        for (int i = 0; i < count; i++) {
-            if (i == selection)
-                printf(" > \033[32m%s\033[0m\n", options[i]);  // highlighted
+        for (int i = 0; i < nombre_options; i++) {
+            if (i == index_selection)
+                printf(" > \033[32m%s\033[0m\n", options[i]);
             else
                 printf("   %s\n", options[i]);
         }
 
-        c = getch();
+        caractere_lu = getch();
 
-        if (c == '\n') {           // ENTER
-            return selection;
-        } else if (c == 27) {      // ESC / arrow prefix
-            getch();               // skip '['
+        if (caractere_lu == '\n') {
+            return index_selection;
+        } else if (caractere_lu == 27) {
+            getch();
             switch(getch()) {
-                case 'A':          // UP
-                    if (selection > 0) selection--;
+                case 'A':
+                    if (index_selection > 0) index_selection--;
                     break;
-                case 'B':          // DOWN
-                    if (selection < count - 1) selection++;
+                case 'B':
+                    if (index_selection < nombre_options - 1) index_selection++;
                     break;
             }
         }
@@ -75,73 +78,86 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    Processus tab[100];
-    int n = lire_fichier(argv[1], tab);
-
-    DIR *dir = opendir("politiques");
-    if (!dir) {
+    DIR *repertoire = opendir("build/politiques");
+    if (!repertoire) {
         perror("Erreur ouverture dossier politiques/");
         return 1;
     }
 
-    struct dirent *entry;
-    char *politiques[50];
-    int count = 0;
+    struct dirent *entree_dir;
+    char *tableau_politiques[50];
+    int nb_politiques = 0;
 
-    char *fifo_file = NULL; 
+    char *nom_politique_fifo = NULL;
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (strstr(entry->d_name, ".so")) {
+    while ((entree_dir = readdir(repertoire)) != NULL) {
+        if (strstr(entree_dir->d_name, ".so")) {
 
-            // Detect FIFO file first
-            if (strncmp(entry->d_name, "fifo", 4) == 0) {
-                fifo_file = strdup(entry->d_name);
+            if (strncmp(entree_dir->d_name, "fifo", 4) == 0) {
+                nom_politique_fifo = strdup(entree_dir->d_name);
             } else {
-                politiques[count++] = strdup(entry->d_name);
+                tableau_politiques[nb_politiques++] = strdup(entree_dir->d_name);
             }
         }
     }
-    closedir(dir);
+    closedir(repertoire);
 
-    // Mettre FIFO par defaut s'il existe
-    if (fifo_file != NULL) {
-        for (int i = count; i > 0; i--) {
-            politiques[i] = politiques[i - 1];
+    if (nom_politique_fifo != NULL) {
+        for (int i = nb_politiques; i > 0; i--) {
+            tableau_politiques[i] = tableau_politiques[i - 1];
         }
-        politiques[0] = fifo_file;
-        count++;
+        tableau_politiques[0] = nom_politique_fifo;
+        nb_politiques++;
     }
-
-
-    if (count == 0) {
+    if (nb_politiques == 0) {
         printf("Aucune politique trouvée dans le dossier.\n");
         return 1;
     }
 
-    int choix_index = menu_interactif(politiques, count);
+    tableau_politiques[nb_politiques++] = "Quitter";
 
-    char chemin[128];
-    snprintf(chemin, sizeof(chemin), "politiques/%s", politiques[choix_index]);
+    while (1) {
+        Processus tableau_processus[100];
+        int nb_processus = lire_processus(argv[1], tableau_processus);
 
-    void *lib = dlopen(chemin, RTLD_LAZY);
-    if (!lib) {
-        fprintf(stderr, "Erreur chargement %s : %s\n", chemin, dlerror());
-        return 1;
+        int index_selection = menu_interactif(tableau_politiques, nb_politiques);
+
+        if (strcmp(tableau_politiques[index_selection], "Quitter") == 0) {
+            printf("Fermeture de l'ordonnanceur.\n");
+            break;
+        }
+
+        char chemin_lib[128];
+        snprintf(chemin_lib, sizeof(chemin_lib), "build/politiques/%s", tableau_politiques[index_selection]);
+
+        void *bibliotheque = dlopen(chemin_lib, RTLD_LAZY);
+        if (!bibliotheque) {
+            fprintf(stderr, "Erreur chargement %s : %s\n", chemin_lib, dlerror());
+            continue;
+        }
+
+        void (*ordonnancer)(Processus[], int);
+        *(void **)(&ordonnancer) = dlsym(bibliotheque, "ordonnancer");
+
+        char *error = dlerror();
+        if (error != NULL) {
+            fprintf(stderr, "Erreur symbole : %s\n", error);
+            dlclose(lib);
+            continue;
+        }
+
+        printf("\nExécution de la politique : %s\n", tableau_politiques[index_selection]);
+        ordonnancer(tableau_processus, nb_processus);
+
+        dlclose(bibliotheque);
+        
+        printf("\nAppuyez sur une touche pour revenir au menu...\n");
+        getch();
     }
 
-    void (*ordonnancer)(Processus[], int);
-    *(void **)(&ordonnancer) = dlsym(lib, "ordonnancer");
-
-    char *error = dlerror();
-    if (error != NULL) {
-        fprintf(stderr, "Erreur symbole : %s\n", error);
-        dlclose(lib);
-        return 1;
+    for (int i = 0; i < nb_politiques - 1; i++) {
+        free(tableau_politiques[i]);
     }
 
-    printf("\nExécution de la politique : %s\n", politiques[choix_index]);
-    ordonnancer(tab, n);
-
-    dlclose(lib);
     return 0;
 }
