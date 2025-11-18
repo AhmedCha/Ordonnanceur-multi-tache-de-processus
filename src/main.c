@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
         char *error = dlerror();
         if (error != NULL) {
             fprintf(stderr, "Erreur symbole : %s\n", error);
-            dlclose(lib);
+            dlclose(chemin_lib);
             continue;
         }
 
