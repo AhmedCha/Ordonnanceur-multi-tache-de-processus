@@ -10,5 +10,5 @@ typedef struct {
 } Processus;
 
 void ordonnancer(Processus tableau_processus[], int nombre_processus);
-
+void schedule_mlfq(Processus** processus, int count);  // AJOUT MLFQ
 #endif
