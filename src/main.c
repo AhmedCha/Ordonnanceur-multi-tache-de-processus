@@ -6,7 +6,6 @@
 #include <termios.h>
 #include <unistd.h>
 #include "processus.h"
-#include "politiques/mlfq.h"  // AJOUT pour MLFQ statique
 
 int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
     FILE *fichier = fopen(chemin_fichier, "r");
@@ -19,10 +18,7 @@ int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
             continue;
         
         int scanned = sscanf(ligne_lue, "%s %d %d %d",
-                             tableau_processus[nb_processus].nom, 
-                             &tableau_processus[nb_processus].arrivee, 
-                             &tableau_processus[nb_processus].duree, 
-                             &tableau_processus[nb_processus].priorite);
+                             tableau_processus[nb_processus].nom, &tableau_processus[nb_processus].arrivee, &tableau_processus[nb_processus].duree, &tableau_processus[nb_processus].priorite);
         
         if (scanned == 4)
             nb_processus++;
@@ -82,74 +78,85 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Options du menu
-    char *options[] = {
-        "FIFO (Dynamique)",
-        "Round Robin (Dynamique)", 
-        "Priorite Preemptive (Dynamique)",
-        "MLFQ with Aging (Statique)",  // AJOUT
-        "Quitter"
-    };
-    int nb_options = 5;
+    DIR *repertoire = opendir("build/politiques");
+    if (!repertoire) {
+        perror("Erreur ouverture dossier politiques/");
+        return 1;
+    }
 
-    // Charger les processus une fois
-    Processus tableau_processus[100];
-    int nb_processus = lire_processus(argv[1], tableau_processus);
+    struct dirent *entree_dir;
+    char *tableau_politiques[50];
+    int nb_politiques = 0;
+
+    char *nom_politique_fifo = NULL;
+
+    while ((entree_dir = readdir(repertoire)) != NULL) {
+        if (strstr(entree_dir->d_name, ".so")) {
+
+            if (strncmp(entree_dir->d_name, "fifo", 4) == 0) {
+                nom_politique_fifo = strdup(entree_dir->d_name);
+            } else {
+                tableau_politiques[nb_politiques++] = strdup(entree_dir->d_name);
+            }
+        }
+    }
+    closedir(repertoire);
+
+    if (nom_politique_fifo != NULL) {
+        for (int i = nb_politiques; i > 0; i--) {
+            tableau_politiques[i] = tableau_politiques[i - 1];
+        }
+        tableau_politiques[0] = nom_politique_fifo;
+        nb_politiques++;
+    }
+    if (nb_politiques == 0) {
+        printf("Aucune politique trouvée dans le dossier.\n");
+        return 1;
+    }
+
+    tableau_politiques[nb_politiques++] = "Quitter";
 
     while (1) {
-        int choix = menu_interactif(options, nb_options);
+        Processus tableau_processus[100];
+        int nb_processus = lire_processus(argv[1], tableau_processus);
 
-        if (choix == 4) { // Quitter
+        int index_selection = menu_interactif(tableau_politiques, nb_politiques);
+
+        if (strcmp(tableau_politiques[index_selection], "Quitter") == 0) {
             printf("Fermeture de l'ordonnanceur.\n");
             break;
         }
 
-        switch(choix) {
-            case 0: // FIFO - Dynamique
-            case 1: // Round Robin - Dynamique  
-            case 2: // Priorite - Dynamique
-                {
-                    // Chargement dynamique comme avant
-                    char* noms_politiques[] = {"fifo", "round_robin", "priorite"};
-                    char chemin_lib[128];
-                    snprintf(chemin_lib, sizeof(chemin_lib), "build/politiques/%s.so", noms_politiques[choix]);
+        char chemin_lib[128];
+        snprintf(chemin_lib, sizeof(chemin_lib), "build/politiques/%s", tableau_politiques[index_selection]);
 
-                    void *bibliotheque = dlopen(chemin_lib, RTLD_LAZY);
-                    if (!bibliotheque) {
-                        fprintf(stderr, "Erreur chargement %s : %s\n", chemin_lib, dlerror());
-                        break;
-                    }
-
-                    void (*ordonnancer)(Processus[], int);
-                    *(void **)(&ordonnancer) = dlsym(bibliotheque, "ordonnancer");
-
-                    char *error = dlerror();
-                    if (error != NULL) {
-                        fprintf(stderr, "Erreur symbole : %s\n", error);
-                        dlclose(bibliotheque);
-                        break;
-                    }
-
-                    printf("\nExécution de : %s\n", options[choix]);
-                    ordonnancer(tableau_processus, nb_processus);
-                    dlclose(bibliotheque);
-                }
-                break;
-
-            case 3: // MLFQ - STATIQUE
-                printf("\nExécution de : MLFQ with Aging\n");
-                // Créer un tableau de pointeurs Processus* pour MLFQ
-                Processus* processes[nb_processus];
-                for (int i = 0; i < nb_processus; i++) {
-                    processes[i] = &tableau_processus[i];
-                    processes[i]->restant = processes[i]->duree; // Initialiser le temps restant
-                }
-                schedule_mlfq(processes, nb_processus);
-                break;
+        void *bibliotheque = dlopen(chemin_lib, RTLD_LAZY);
+        if (!bibliotheque) {
+            fprintf(stderr, "Erreur chargement %s : %s\n", chemin_lib, dlerror());
+            continue;
         }
+
+        void (*ordonnancer)(Processus[], int);
+        *(void **)(&ordonnancer) = dlsym(bibliotheque, "ordonnancer");
+
+        char *error = dlerror();
+        if (error != NULL) {
+            fprintf(stderr, "Erreur symbole : %s\n", error);
+            dlclose(chemin_lib);
+            continue;
+        }
+
+        printf("\nExécution de la politique : %s\n", tableau_politiques[index_selection]);
+        ordonnancer(tableau_processus, nb_processus);
+
+        dlclose(bibliotheque);
         
         printf("\nAppuyez sur une touche pour revenir au menu...\n");
         getch();
+    }
+
+    for (int i = 0; i < nb_politiques - 1; i++) {
+        free(tableau_politiques[i]);
     }
 
     return 0;
