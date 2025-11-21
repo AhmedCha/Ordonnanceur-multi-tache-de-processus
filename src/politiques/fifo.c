@@ -14,10 +14,18 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     }
     int temps = 0;
     for (int i = 0; i < nombre_processus; i++) {
-        if (temps < tableau_processus[i].arrivee)
-            temps = tableau_processus[i].arrivee;
-        printf("%s s’exécute de %d à %d\n",
-               tableau_processus[i].nom, temps, temps + tableau_processus[i].duree);
-        temps += tableau_processus[i].duree;
+        tableau_processus[i].nb_segments = 0;
+
+        int temps_debut = (temps < tableau_processus[i].arrivee) ? tableau_processus[i].arrivee : temps;
+        int temps_fin = temps_debut + tableau_processus[i].duree;
+
+        if (temps_fin > temps_debut) {
+            tableau_processus[i].diagramme_gantt[0].debut = temps_debut;
+            tableau_processus[i].diagramme_gantt[0].fin = temps_fin;
+            tableau_processus[i].nb_segments = 1;
+        }
+
+        temps = temps_fin;
+        tableau_processus[i].temps_sortie = temps_fin;
     }
 }

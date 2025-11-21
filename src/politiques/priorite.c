@@ -8,8 +8,10 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     int nb_termines = 0;
     int i;
 
-    for (i = 0; i < nombre_processus; i++)
+    for (i = 0; i < nombre_processus; i++) {
         temps_restant[i] = tableau_processus[i].duree;
+        tableau_processus[i].nb_segments = 0;
+    }
 
     int processus_courant = -1;
     int debut_execution = 0;
@@ -34,9 +36,14 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
 
         if (processus_courant != index_selectionne) {
             if (processus_courant != -1) {
-                printf("%s (priorité %d) s’exécute de %d à %d\n",
-                       tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
-                       debut_execution, temps);
+                Processus* processus_precedent = &tableau_processus[processus_courant];
+                int index_segment = processus_precedent->nb_segments;
+                
+                if (index_segment < MAX_SEGMENTS_GANTT) {
+                    processus_precedent->diagramme_gantt[index_segment].debut = debut_execution;
+                    processus_precedent->diagramme_gantt[index_segment].fin = temps;
+                    processus_precedent->nb_segments++;
+                }
             }
             processus_courant = index_selectionne;
             debut_execution = temps;
@@ -46,11 +53,19 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
         temps++;
 
         if (temps_restant[processus_courant] == 0) {
-            printf("%s (priorité %d) s’exécute de %d à %d\n",
-                   tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
-                   debut_execution, temps);
+            Processus* processus_termine = &tableau_processus[processus_courant];
+            int index_segment = processus_termine->nb_segments;
+
+            if (index_segment < MAX_SEGMENTS_GANTT) {
+                processus_termine->diagramme_gantt[index_segment].debut = debut_execution;
+                processus_termine->diagramme_gantt[index_segment].fin = temps;
+                processus_termine->nb_segments++;
+            }
+            
+            processus_termine->temps_sortie = temps;
             nb_termines++;
             processus_courant = -1;
+            debut_execution = 0;
         }
     }
 }

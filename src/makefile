@@ -1,33 +1,32 @@
-# Compiler and flags
-CC = gcc
 CFLAGS = -Wall -Wextra -fPIC
-LDFLAGS = -ldl
 
-# Source files and targets
+SRCS = $(wildcard *.c)
 POL_SRCS = $(wildcard politiques/*.c)
 POL_LIBS = $(patsubst politiques/%.c,build/politiques/%.so,$(POL_SRCS))
 
-# Default target
 all: main $(POL_LIBS)
 
-# Ensure build directories exist
 build/politiques:
 	mkdir -p build/politiques
 
-# Build main program
-main: main.c
-	gcc $(CFLAGS) -o $@ $< $(LDFLAGS)
+MAIN_OBJS = main.o affichage.o
 
-# Build each .so into build/politiques/
+main: $(MAIN_OBJS)
+	gcc $(CFLAGS) -o $@ $^ -ldl
+
+main.o: main.c processus.h
+	gcc $(CFLAGS) -c $<
+
+affichage.o: affichage.c processus.h
+	gcc $(CFLAGS) -c $<
+
 build/politiques/%.so: politiques/%.c processus.h | build/politiques
 	gcc $(CFLAGS) -shared -o $@ $<
 
-# Clean
 clean:
-	rm -rf main
+	rm -f main $(MAIN_OBJS)
 	rm -rf build
 
-# Rebuild
 re: clean all
 
 .PHONY: all clean re

@@ -149,6 +149,8 @@ int main(int argc, char *argv[]) {
         printf("\nExécution de la politique : %s\n", tableau_politiques[index_selection]);
         ordonnancer(tableau_processus, nb_processus);
 
+        afficher_resultats(tableau_processus, nb_processus);
+
         dlclose(bibliotheque);
         
         printf("\nAppuyez sur une touche pour revenir au menu...\n");
