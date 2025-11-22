@@ -1,4 +1,3 @@
-// src/politiques/aging.c
 #include <stdio.h>
 #include "../processus.h"
 
@@ -35,7 +34,6 @@ void ordonnancer(Processus T[], int n) {
             }
         }
 
-        // 2. Sélection du processus avec la plus haute priorité dynamique
         int meilleure_prio = -1;
         int selectionne = -1;
         for (int i = 0; i < n; i++) {
@@ -50,7 +48,6 @@ void ordonnancer(Processus T[], int n) {
             continue;
         }
 
-        // 3. Changement de contexte → affichage bloc précédent
         if (courant != -1 && courant != selectionne) {
             printf("%s (priorité %d) s’exécute de %d à %d\n",
                    T[courant].nom, prio_dyn[courant], debut, temps);
@@ -61,11 +58,9 @@ void ordonnancer(Processus T[], int n) {
             debut = temps;
         }
 
-        // 4. Exécution d'une unité
         restant[courant]--;
         temps++;
 
-        // 5. Fin du processus
         if (restant[courant] == 0) {
             printf("%s (priorité %d) s’exécute de %d à %d\n",
                    T[courant].nom, prio_dyn[courant], debut, temps);
@@ -74,6 +69,5 @@ void ordonnancer(Processus T[], int n) {
         }
     }
 
-    // RIEN APRÈS → retour direct au menu (comme priorite.c)
     printf("\nAppuyez sur une touche pour revenir au menu...\n");
 }
