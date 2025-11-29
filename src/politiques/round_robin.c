@@ -1,89 +1,85 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include "../processus.h"
 
-void vider_tampon_entree() {
-    int caractere;
-    while ((caractere = getchar()) != '\n' && caractere != EOF) { }
-}
-void ordonnancer(Processus tableau_processus[], int nombre_processus) {
-    int quantum;
-    printf("===== Ordonnancement Round Robin =====\n");
-    printf("Entrez la valeur du quantum : ");
-    if (scanf("%d", &quantum) != 1 || quantum <= 0) {
-        printf("Quantum invalide.\n");
-        vider_tampon_entree();
-        return;
-    }
-    vider_tampon_entree();
+#define MAX_PROCS 100
+#define TAILLE_FILE 1000
 
-    int temps_restant[nombre_processus];
-    for (int i = 0; i < nombre_processus; i++) temps_restant[i] = tableau_processus[i].duree;
-
-    for (int i = 0; i < nombre_processus - 1; i++) {
-        for (int j = i + 1; j < nombre_processus; j++) {
-            if (tableau_processus[j].arrivee < tableau_processus[i].arrivee) {
-                Processus processus_temporaire = tableau_processus[i];
-                tableau_processus[i] = tableau_processus[j];
-                tableau_processus[j] = processus_temporaire;
-                int temps_restant_temporaire = temps_restant[i];
-                temps_restant[i] = temps_restant[j];
-                temps_restant[j] = temps_restant_temporaire;
-            }
-        }
+void ordonnancer(Processus tab[], int N) {
+    printf("===== PRIORITÉ PRÉEMPTIVE + RR(prio égale) =====\n");
+    
+    for(int i = 0; i < N; i++) {
+        tab[i].restant = tab[i].duree;
+        tab[i].nb_segments = 0;
+        tab[i].temps_sortie = -1;
     }
 
-    int temps = 0;
-    int nb_termines = 0;
-
-    int file_attente[2 * nombre_processus];
+    int temps = 0, finis = 0;
+    int file_attente[TAILLE_FILE];
     int debut = 0, fin = 0;
+    int current_prio_level = 0;  // ✅ RÈGLE 1
 
-    for (int i = 0; i < nombre_processus; i++) {
-        if (tableau_processus[i].arrivee <= 0 && temps_restant[i] > 0) file_attente[fin++] = i;
-    }
-    if (debut == fin) {
-        temps = tableau_processus[0].arrivee;
-        file_attente[fin++] = 0;
-    }
+    while(finis < N) {
+        // ✅ RÈGLE 1 : PRIORITÉ MAX + PRÉEMPTION
+        int max_prio = 0;
+        for(int i = 0; i < N; i++) {
+            if(tab[i].restant > 0 && tab[i].arrivee <= temps)
+                max_prio = (tab[i].priorite > max_prio) ? tab[i].priorite : max_prio;
+        }
+        if(max_prio == 0) { temps++; continue; }
 
-    while (nb_termines < nombre_processus) {
-        if (debut == fin) {
-            temps++;
-            for (int j = 0; j < nombre_processus; j++) {
-                if (tableau_processus[j].arrivee == temps && temps_restant[j] > 0) file_attente[fin++] = j;
-            }
-            continue;
+        // ✅ PRÉEMPTION : new_max_prio > current_prio_level
+        int new_max_prio = max_prio;
+        if(new_max_prio > current_prio_level) {
+            current_prio_level = new_max_prio;
+            debut = fin = 0;  // Reset file
+            printf("[PREEMPT t=%d] prio=%d\n", temps, new_max_prio);
         }
 
-        int i = file_attente[debut++];
-
-        if (temps_restant[i] <= 0) continue;
-
-        if (tableau_processus[i].arrivee > temps) temps = tableau_processus[i].arrivee;
-
-        int duree_execution = (temps_restant[i] < quantum) ? temps_restant[i] : quantum;
-        printf("%s s’exécute de %d à %d\n", tableau_processus[i].nom, temps, temps + duree_execution);
-
-        int temps_debut_segment = temps;
-        temps += duree_execution;
-        temps_restant[i] -= duree_execution;
-
-        for (int j = 0; j < nombre_processus; j++) {
-            if (j == i) continue;
-            if (tableau_processus[j].arrivee > temps_debut_segment && tableau_processus[j].arrivee <= temps && temps_restant[j] > 0) {
-                int deja_dans_file = 0;
-                for (int k = debut; k < fin; k++) {
-                    if (file_attente[k] == j) { deja_dans_file = 1; break; }
+        // ✅ RÈGLE 3 : File RR pour processus à max_prio
+        for(int i = 0; i < N; i++) {
+            if(tab[i].restant > 0 && tab[i].arrivee <= temps && 
+               tab[i].priorite == max_prio) {
+                int en_file = 0;
+                for(int pos = debut; pos != fin; pos = (pos + 1) % TAILLE_FILE) {
+                    if(file_attente[pos] == i) { en_file = 1; break; }
                 }
-                if (!deja_dans_file) file_attente[fin++] = j;
+                if(!en_file) {
+                    file_attente[fin] = i;
+                    fin = (fin + 1) % TAILLE_FILE;
+                }
             }
         }
 
-        if (temps_restant[i] > 0) {
-            file_attente[fin++] = i;
+        if(debut == fin) { temps++; continue; }
+
+        // ✅ RÈGLE 4 : 1 UNITÉ SEULEMENT
+        int i = file_attente[debut];
+        debut = (debut + 1) % TAILLE_FILE;
+        
+        Processus* p = &tab[i];
+        int debut_segment = temps;
+        temps++;  // ✅ 1 unité
+        p->restant--;  // ✅ RÈGLE 4
+        
+        if(p->nb_segments < MAX_SEGMENTS_GANTT) {
+            p->diagramme_gantt[p->nb_segments].debut = debut_segment;
+            p->diagramme_gantt[p->nb_segments].fin = temps;
+            p->nb_segments++;
+        }
+
+        // ✅ RÈGLE 2 : Prio-- APRÈS 1 unité
+        if(p->priorite > 1) {
+            p->priorite--;
+            printf("[t=%d] %s ↓prio=%d\n", debut_segment, p->nom, p->priorite);
+        }
+
+        // Remettre en file si pas fini (RR)
+        if(p->restant > 0) {
+            file_attente[fin] = i;
+            fin = (fin + 1) % TAILLE_FILE;
         } else {
-            nb_termines++;
+            p->temps_sortie = temps;
+            finis++;
         }
     }
 }
