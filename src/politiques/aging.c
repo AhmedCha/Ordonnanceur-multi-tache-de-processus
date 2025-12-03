@@ -13,12 +13,11 @@ void ordonnancer(Processus T[], int n) {
     for (int i = 0; i < n; i++) {
         restant[i] = T[i].duree;
         prio_dyn[i] = T[i].priorite;
-        T[i].nb_segments = 0;
     }
 
     int fin = 0;
     int courant = -1;
-    int debut_segment = 0;
+    int debut = 0;
 
     printf("===== Ordonnancement par Priorité Préemptive + Aging =====\n");
 
@@ -48,32 +47,25 @@ void ordonnancer(Processus T[], int n) {
         }
 
         if (courant != -1 && courant != selectionne) {
-            Processus* p = &T[courant];
-            if (p->nb_segments < MAX_SEGMENTS_GANTT) {
-                p->diagramme_gantt[p->nb_segments].debut = debut_segment;
-                p->diagramme_gantt[p->nb_segments].fin = temps;
-                p->nb_segments++;
-            }
+            printf("%s (priorité %d) s’exécute de %d à %d\n",
+                   T[courant].nom, prio_dyn[courant], debut, temps);
         }
 
         if (courant != selectionne) {
             courant = selectionne;
-            debut_segment = temps;
+            debut = temps;
         }
 
         restant[courant]--;
         temps++;
 
         if (restant[courant] == 0) {
-            Processus* p = &T[courant];
-            if (p->nb_segments < MAX_SEGMENTS_GANTT) {
-                p->diagramme_gantt[p->nb_segments].debut = debut_segment;
-                p->diagramme_gantt[p->nb_segments].fin = temps;
-                p->nb_segments++;
-            }
-            p->temps_sortie = temps;
+            printf("%s (priorité %d) s’exécute de %d à %d\n",
+                   T[courant].nom, prio_dyn[courant], debut, temps);
             fin++;
             courant = -1;
         }
     }
+
+    printf("\nAppuyez sur une touche pour revenir au menu...\n");
 }

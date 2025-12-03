@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include "../processus.h"
 
 void vider_tampon_entree() {

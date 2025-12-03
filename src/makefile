@@ -1,4 +1,3 @@
-SRCS = $(wildcard *.c)
 POL_SRCS = $(wildcard politiques/*.c)
 POL_LIBS = $(patsubst politiques/%.c,build/politiques/%.so,$(POL_SRCS))
 
