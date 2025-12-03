@@ -136,48 +136,20 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // ⬇️⬇️⬇️ DÉBUT DU DEBUG - BIEN PLACÉ ⬇️⬇️⬇️
-        printf("🔍 CHARGEMENT: %s\n", tableau_politiques[index_selection]);
-        printf("🔍 CHEMIN: %s\n", chemin_lib);
-        printf("🔍 BIBLIOTHEQUE: %p\n", bibliotheque);
-
         void (*ordonnancer)(Processus[], int);
         *(void **)(&ordonnancer) = dlsym(bibliotheque, "ordonnancer");
-
-        printf("🔍 ORDONNANCER: %p\n", ordonnancer);
-
-        // Debug des processus chargés
-        printf("🔍 PROCESSUS CHARGÉS (%d):\n", nb_processus);
-        for (int i = 0; i < nb_processus; i++) {
-            printf("  - %s: arrivee=%d, duree=%d, prio=%d\n", 
-                   tableau_processus[i].nom, tableau_processus[i].arrivee,
-                   tableau_processus[i].duree, tableau_processus[i].priorite);
-        }
-
         char *error = dlerror();
         if (error != NULL) {
             fprintf(stderr, "Erreur symbole : %s\n", error);
-<<<<<<< Updated upstream
           dlclose(bibliotheque);
-
-=======
-            dlclose(bibliotheque);  // ⚠️ CORRECTION: bibliotheque, pas chemin_lib!
->>>>>>> Stashed changes
             continue;
         }
 
         if (ordonnancer == NULL) {
-            printf("❌ ERREUR: fonction ordonnancer non trouvée!\n");
             dlclose(bibliotheque);
             continue;
-        } else {
-            printf("✅ SUCCÈS: fonction ordonnancer trouvée, appel...\n");
-        }
-
-        printf("\n🎯 DÉBUT EXÉCUTION ORDONNANCEUR 🎯\n");
+        } 
         ordonnancer(tableau_processus, nb_processus);
-        printf("🎯 FIN EXÉCUTION ORDONNANCEUR 🎯\n");
-        // ⬆️⬆️⬆️ FIN DU DEBUG ⬆️⬆️⬆️
 
         afficher_resultats(tableau_processus, nb_processus);
 
@@ -191,5 +163,4 @@ int main(int argc, char *argv[]) {
         free(tableau_politiques[i]);
     }
 
-    return 0;
-}
+    return 0;}

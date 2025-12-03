@@ -4,7 +4,6 @@
 void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     printf("===== Ordonnancement FIFO =====\n");
     
-    // Tri plus efficace par date d'arrivée
     for (int i = 0; i < nombre_processus - 1; i++) {
         int min_index = i;
         for (int j = i + 1; j < nombre_processus; j++) {
@@ -23,17 +22,22 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     
     for (int i = 0; i < nombre_processus; i++) {
         tableau_processus[i].nb_segments = 0;
-
-        int temps_debut = (temps < tableau_processus[i].arrivee) ? tableau_processus[i].arrivee : temps;
-        int temps_fin = temps_debut + tableau_processus[i].duree;
-
-        if (temps_fin > temps_debut) {
-            tableau_processus[i].diagramme_gantt[0].debut = temps_debut;
-            tableau_processus[i].diagramme_gantt[0].fin = temps_fin;
-            tableau_processus[i].nb_segments = 1;
+        tableau_processus[i].restant = tableau_processus[i].duree;
+        
+        if (temps_courant < tableau_processus[i].arrivee) {
+            temps_courant = tableau_processus[i].arrivee;
         }
-
-        temps = temps_fin;
-        tableau_processus[i].temps_sortie = temps_fin;
+        
+        tableau_processus[i].diagramme_gantt[0].debut = temps_courant;
+        tableau_processus[i].diagramme_gantt[0].fin = temps_courant + tableau_processus[i].duree;
+        tableau_processus[i].nb_segments = 1;
+        
+        temps_courant += tableau_processus[i].duree;
+        tableau_processus[i].temps_sortie = temps_courant;
+        
+        printf("Processus %s exécuté de %d à %d\n", 
+               tableau_processus[i].nom,
+               tableau_processus[i].diagramme_gantt[0].debut,
+               tableau_processus[i].diagramme_gantt[0].fin);
     }
 }
