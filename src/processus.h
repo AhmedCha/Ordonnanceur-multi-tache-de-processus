@@ -14,6 +14,8 @@ typedef struct {
     int duree;
     int priorite;
     int restant;
+    int temps_debut;    
+
     int temps_sortie;
     Segment_Diagramme_Gantt diagramme_gantt[MAX_SEGMENTS_GANTT];
     int nb_segments;

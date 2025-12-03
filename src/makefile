@@ -1,4 +1,5 @@
 SRCS = $(wildcard *.c)
+SRCS = $(wildcard *.c)
 POL_SRCS = $(wildcard politiques/*.c)
 POL_LIBS = $(patsubst politiques/%.c,build/politiques/%.so,$(POL_SRCS))
 
@@ -19,6 +20,7 @@ affichage.o: affichage.c processus.h
 	gcc -Wall -Wextra -fPIC -c $<
 
 build/politiques/%.so: politiques/%.c processus.h | build/politiques
+	gcc -Wall -Wextra -fPIC -shared -o $@ $<
 	gcc -Wall -Wextra -fPIC -shared -o $@ $<
 
 clean:
