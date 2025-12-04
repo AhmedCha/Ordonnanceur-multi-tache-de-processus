@@ -149,15 +149,17 @@ int main(int argc, char *argv[]) {
 
         void (*ordonnancer)(Processus[], int);
         *(void **)(&ordonnancer) = dlsym(bibliotheque, "ordonnancer");
-
         char *error = dlerror();
         if (error != NULL) {
             fprintf(stderr, "Erreur symbole : %s\n", error);
-            dlclose(chemin_lib);
+          dlclose(bibliotheque);
             continue;
         }
 
-        printf("\nExécution de la politique : %s\n", tableau_politiques[index_selection]);
+        if (ordonnancer == NULL) {
+            dlclose(bibliotheque);
+            continue;
+        } 
         ordonnancer(tableau_processus, nb_processus);
 
         afficher_resultats(tableau_processus, nb_processus);
@@ -172,5 +174,4 @@ int main(int argc, char *argv[]) {
         free(tableau_politiques[i]);
     }
 
-    return 0;
-}
+    return 0;}
