@@ -6,6 +6,9 @@
 #include <termios.h>
 #include <unistd.h>
 #include "processus.h"
+#include <glib.h>
+
+void launch_gui(int argc, char *argv[]);
 
 int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
     FILE *fichier = fopen(chemin_fichier, "r");
@@ -73,6 +76,14 @@ int menu_interactif(char *options[], int nombre_options) {
 }
 
 int main(int argc, char *argv[]) {
+    // Use memory backend to avoid dconf warnings
+    g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+
+    // Launch the GUI
+    launch_gui(argc, argv);
+    return 0;
+
+
     if (argc < 2) {
         printf("Usage: %s <fichier_configuration>\n", argv[0]);
         return 1;
