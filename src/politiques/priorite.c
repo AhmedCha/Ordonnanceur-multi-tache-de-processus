@@ -1,56 +1,26 @@
 #include <stdio.h>
 #include "../processus.h"
 
-void ordonnancer(Processus tableau_processus[], int nombre_processus) {
-    printf("===== Ordonnancement par Priorité Préemptive =====\n");
-    int temps = 0;
-    int temps_restant[nombre_processus];
-    int nb_termines = 0;
-    int i;
+void ordonnancer(Processus p[], int n) {
+    int temps = 0, i, idx, min_prio;
 
-    for (i = 0; i < nombre_processus; i++)
-        temps_restant[i] = tableau_processus[i].duree;
-
-    int processus_courant = -1;
-    int debut_execution = 0;
-
-    while (nb_termines < nombre_processus) {
-        int index_selectionne = -1;
-        int max_priorite = -1;
-
-        for (i = 0; i < nombre_processus; i++) {
-            if (tableau_processus[i].arrivee <= temps && temps_restant[i] > 0) {
-                if (tableau_processus[i].priorite > max_priorite) {
-                    max_priorite = tableau_processus[i].priorite;
-                    index_selectionne = i;
-                }
+    while (temps < 10000) {
+        idx = -1; min_prio = 9999;
+        for (i = 0; i < n; i++) {
+            if (p[i].arrivee <= temps && p[i].restant > 0 && p[i].priorite < min_prio) {
+                min_prio = p[i].priorite;
+                idx = i;
             }
         }
+        if (idx == -1) { temps++; continue; }
 
-        if (index_selectionne == -1) {
-            temps++;
-            continue;
-        }
-
-        if (processus_courant != index_selectionne) {
-            if (processus_courant != -1) {
-                printf("%s (priorité %d) s’exécute de %d à %d\n",
-                       tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
-                       debut_execution, temps);
-            }
-            processus_courant = index_selectionne;
-            debut_execution = temps;
-        }
-
-        temps_restant[processus_courant]--;
+        int seg = p[idx].nb_segments++;
+        p[idx].gantt[seg].debut = temps;
+        p[idx].restant--;
         temps++;
+        p[idx].gantt[seg].fin = temps;
 
-        if (temps_restant[processus_courant] == 0) {
-            printf("%s (priorité %d) s’exécute de %d à %d\n",
-                   tableau_processus[processus_courant].nom, tableau_processus[processus_courant].priorite,
-                   debut_execution, temps);
-            nb_termines++;
-            processus_courant = -1;
-        }
+        if (p[idx].restant == 0)
+            p[idx].temps_sortie = temps;
     }
 }

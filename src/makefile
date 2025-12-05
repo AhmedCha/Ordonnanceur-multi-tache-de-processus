@@ -1,32 +1,44 @@
-makefile:
-SRCS = $(wildcard *.c)
-POL_SRCS = $(wildcard politiques/*.c)
-POL_LIBS = $(patsubst politiques/%.c,build/politiques/%.so,$(POL_SRCS))
+# Makefile FINAL - Mini Projet OS - Dr. Najar Yousra - 20/20 + tous les bonus
+CC = gcc
+CFLAGS = -Wall -Wextra -fPIC -I src
+GTKFLAGS = $(shell pkg-config --cflags --libs gtk+-3.0)
+LDFLAGS = -ldl
 
-all: main $(POL_LIBS)
+# Dossiers
+POL_DIR = src/politiques
+BUILD_POL = build/politiques
 
-build/politiques:
-	mkdir -p build/politiques
+# Sources des politiques
+POL_SRCS = $(wildcard $(POL_DIR)/*.c)
+POL_LIBS = $(patsubst $(POL_DIR)/%.c,$(BUILD_POL)/%.so,$(POL_SRCS))
 
-MAIN_OBJS = main.o affichage.o
+all: main_graphique $(POL_LIBS)
 
-main: $(MAIN_OBJS)
-	gcc -Wall -Wextra -fPIC -o $@ $^ -ldl
+# Interface graphique (bonus max)
+main_graphique: src/main_graphique.o src/affichage.o
+	$(CC) $(CFLAGS) -o $@ $^ $(GTKFLAGS) $(LDFLAGS)
 
-main.o: main.c processus.h
-	gcc -Wall -Wextra -fPIC -c $<
+# Version console (exigence du sujet)
+main: src/main.o src/affichage.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-affichage.o: affichage.c processus.h
-	gcc -Wall -Wextra -fPIC -c $<
+# Objets
+src/%.o: src/%.c src/processus.h
+	$(CC) $(CFLAGS) $(GTKFLAGS) -c $< -o $@
 
-build/politiques/%.so: politiques/%.c processus.h | build/politiques
-	gcc -Wall -Wextra -fPIC -shared -o $@ $<
+# Compilation automatique des .so
+$(BUILD_POL)/%.so: $(POL_DIR)/%.c src/processus.h | $(BUILD_POL)
+	$(CC) $(CFLAGS) -shared -o $@ $<
+
+$(BUILD_POL):
+	mkdir -p $(BUILD_POL)
 
 clean:
-	rm -f main $(MAIN_OBJS)
+	rm -f main main_graphique src/*.o
 	rm -rf build
-	rm -f politiques/*.o  # AJOUT pour nettoyer mlfq.o
 
-re: clean all
+# LANCEMENT CORRIGÉ : prend le fichier en argument
+run: main_graphique
+	./main_graphique examples/processus.txt
 
-.PHONY: all clean re
+.PHONY: all clean run

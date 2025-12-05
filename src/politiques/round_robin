@@ -1,0 +1,44 @@
+#include <stdio.h>
+#include "../processus.h"
+
+#ifndef QUANTUM
+#define QUANTUM 4
+#endif
+
+void ordonnancer(Processus p[], int n) {
+    int quantum = QUANTUM;
+    int temps = 0, i;
+    int file[100], debut = 0, fin = 0;
+
+    while (temps < 10000) {
+        // Ajouter les processus arrivés
+        for (i = 0; i < n; i++)
+            if (p[i].arrivee == temps && p[i].restant > 0)
+                file[fin++] = i;
+
+        if (debut < fin) {
+            int idx = file[debut++];
+            int exec = 0;
+
+            int seg = p[idx].nb_segments++;
+            p[idx].gantt[seg].debut = temps;
+
+            while (exec < quantum && p[idx].restant > 0) {
+                p[idx].restant--;
+                temps++;
+                exec++;
+
+                // Ajouter ceux qui arrivent pendant l'exécution
+                for (i = 0; i < n; i++)
+                    if (p[i].arrivee == temps && p[i].restant > 0)
+                        file[fin++] = i;
+            }
+            p[idx].gantt[seg].fin = temps;
+
+            if (p[idx].restant > 0)
+                file[fin++] = idx;
+            else
+                p[idx].temps_sortie = temps;
+        } else temps++;
+    }
+}
