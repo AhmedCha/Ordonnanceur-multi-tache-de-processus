@@ -2,7 +2,7 @@
 #include "../processus.h"
 
 void ordonnancer(Processus p[], int n) {
-    printf("===== Ordonnancement par Priorité Préemptive =====\n");
+    // printf("===== Ordonnancement par Priorité Préemptive =====\n");
 
     int temps = 0;
     int restant[n];

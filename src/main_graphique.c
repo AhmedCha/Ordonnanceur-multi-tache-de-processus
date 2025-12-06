@@ -50,6 +50,13 @@
     // POPUP QUANTUM + LANCEMENT CORRECT
     // VERSION PRO – PLUS DE RECOMPILATION, QUANTUM PASSÉ DIRECTEMENT
 void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
+    // ARRÊT IMMÉDIAT DE TOUTE ANIMATION EN COURS
+    animation_en_cours = FALSE;
+    algo_lance = FALSE;
+    temps_actuel = 0;
+    temps_max = 0;
+    gtk_widget_queue_draw(drawing_area);
+
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Round Robin - Quantum",
                                                    GTK_WINDOW(gtk_widget_get_toplevel(widget)),
                                                    GTK_DIALOG_MODAL,
@@ -72,38 +79,50 @@ void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
         int q = atoi(gtk_entry_get_text(GTK_ENTRY(entry)));
         if (q < 1) q = 4;
 
-        // Réinitialiser
-        animation_en_cours = FALSE;
-        algo_lance = FALSE;
-        temps_actuel = 0;
-        temps_max = 0;
-
-        // On garde le .so normal (compilé une fois)
-        // On passe juste le quantum en paramètre
-        extern void ordonnancer(Processus[], int, int);
-        void (*rr)(Processus[], int, int) = dlsym(dlopen("./build/politiques/round_robin.so", RTLD_LAZY), "ordonnancer");
-
-        if (rr) {
-            for (int i = 0; i < nprocs; i++) {
-                procs[i].restant = procs[i].duree;
-                procs[i].nb_segments = 0;
-                procs[i].temps_sortie = -1;
-            }
-            rr(procs, nprocs, q);
-
-            for (int i = 0; i < nprocs; i++)
-                if (procs[i].temps_sortie > temps_max)
-                    temps_max = procs[i].temps_sortie;
-
-            algo_lance = TRUE;
-            animation_en_cours = TRUE;
-            g_timeout_add(600, animer, NULL);
-            gtk_widget_queue_draw(drawing_area);
+        // Charger le .so normal (compilé une fois)
+        void *handle = dlopen("./build/politiques/round_robin.so", RTLD_LAZY);
+        if (!handle) {
+            g_print("ERREUR: round_robin.so non trouvé\n");
+            gtk_widget_destroy(dialog);
+            return;
         }
+
+        void (*rr)(Processus[], int, int) = dlsym(handle, "ordonnancer");
+        if (!rr) {
+            g_print("ERREUR: fonction ordonnancer non trouvée\n");
+            dlclose(handle);
+            gtk_widget_destroy(dialog);
+            return;
+        }
+
+        // Réinitialiser
+        for (int i = 0; i < nprocs; i++) {
+            procs[i].restant = procs[i].duree;
+            procs[i].nb_segments = 0;
+            procs[i].temps_sortie = -1;
+        }
+
+        // Exécuter avec le quantum choisi
+        rr(procs, nprocs, q);
+
+        // Calculer temps_max
+        temps_max = 0;
+        for (int i = 0; i < nprocs; i++) {
+            if (procs[i].temps_sortie > temps_max)
+                temps_max = procs[i].temps_sortie;
+        }
+
+        // Lancer l'animation
+        algo_lance = TRUE;
+        animation_en_cours = TRUE;
+        temps_actuel = 0;
+        g_timeout_add(600, animer, NULL);
+        gtk_widget_queue_draw(drawing_area);
+
+        dlclose(handle);
     }
     gtk_widget_destroy(dialog);
 }
-
     // Lancer un algo (ne touche PLUS à algo_lance ici)
     void lancer_algo(GtkWidget *w, gpointer data) {
         const char *algo = (const char*)data;
