@@ -48,6 +48,7 @@ static gboolean animer(gpointer data) {
 }
 
 void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
+    // Nettoyage complet
     animation_en_cours = FALSE;
     algo_lance = FALSE;
     temps_actuel = 0;
@@ -62,13 +63,14 @@ void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
                                                    NULL);
 
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_start(GTK_BOX(content), box, TRUE, TRUE, 20);
 
-    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Quantum : "), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Entrez le quantum : "), FALSE, FALSE, 0);
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(entry), "4");
-    gtk_box_pack_start(GTK_BOX(box), entry, TRUE, TRUE, 10);
+    gtk_entry_set_width_chars(GTK_ENTRY(entry), 10);
+    gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 0);
 
     gtk_widget_show_all(dialog);
 
@@ -76,35 +78,63 @@ void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
         int q = atoi(gtk_entry_get_text(GTK_ENTRY(entry)));
         if (q < 1) q = 4;
 
+        // ON FORCE LA RECOMPILATION AVEC LE BON QUANTUM
+        system("rm -f build/politiques/round_robin.so");
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd),
+                 "gcc -fPIC -shared -o build/politiques/round_robin.so politiques/round_robin.c -DQUANTUM=%d -w",
+                 q);
+        int result = system(cmd);
+
+        if (result != 0) {
+            g_print("ERREUR : Échec de compilation de round_robin.so avec quantum=%d\n", q);
+            gtk_widget_destroy(dialog);
+            return;
+        }
+
+        // Maintenant on charge le NOUVEAU .so
         void *handle = dlopen("./build/politiques/round_robin.so", RTLD_LAZY);
-        if (!handle) return;
+        if (!handle) {
+            g_print("ERREUR : Impossible de charger le .so recompilé\n");
+            gtk_widget_destroy(dialog);
+            return;
+        }
 
-        void (*rr)(Processus[], int, int) = dlsym(handle, "ordonnancer");
-        if (!rr) { dlclose(handle); return; }
+        void (*rr)(Processus[], int) = dlsym(handle, "ordonnancer");
+        if (!rr) {
+            g_print("ERREUR : Fonction ordonnancer non trouvée\n");
+            dlclose(handle);
+            gtk_widget_destroy(dialog);
+            return;
+        }
 
+        // Réinitialisation
         for (int i = 0; i < nprocs; i++) {
             procs[i].restant = procs[i].duree;
             procs[i].nb_segments = 0;
             procs[i].temps_sortie = -1;
         }
 
-        rr(procs, nprocs, q);
+        // Exécution avec LE BON QUANTUM
+        rr(procs, nprocs);
 
+        // Calcul temps_max
         temps_max = 0;
         for (int i = 0; i < nprocs; i++)
             if (procs[i].temps_sortie > temps_max)
                 temps_max = procs[i].temps_sortie;
 
+        // Lancement animation
         algo_lance = TRUE;
         animation_en_cours = TRUE;
         temps_actuel = 0;
         g_timeout_add(600, animer, NULL);
         gtk_widget_queue_draw(drawing_area);
+
         dlclose(handle);
     }
     gtk_widget_destroy(dialog);
 }
-
 void lancer_algo(GtkWidget *w, gpointer data) {
     animation_en_cours = FALSE;
     algo_lance = FALSE;
