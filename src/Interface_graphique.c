@@ -1,239 +1,215 @@
+// Interface_graphique.c — VERSION FINALE : DOUCE, MODERNE, SANS VIOLET
 #include <gtk/gtk.h>
 #include <cairo.h>
-#include "processus.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <math.h>
+#include "processus.h"
 
-enum {
-    COL_NOM,
-    COL_ARRIVEE,
-    COL_DUREE,
-    COL_PRIORITE,
-    NUM_COLS
-};
+enum { COL_NOM, COL_ARRIVEE, COL_DUREE, COL_PRIORITE, NUM_COLS };
 
 static GtkListStore *store;
 static Processus processus_list[100];
 static int num_processus = 0;
 static GtkWidget *gantt_drawing_area;
-static GtkWidget *results_text_view;
 static GtkWidget *algorithm_combo;
 static GtkWidget *quantum_spin_button;
-int global_quantum = 4; 
+int global_quantum = 4;
 
-void run_scheduler_callback(GtkButton *button, gpointer user_data);
-gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data);
-void on_algorithm_changed(GtkComboBox *widget, gpointer user_data);
-void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data);
+int temps_actuel = 0, temps_max = 0;
+gboolean animation_en_cours = FALSE, algo_lance = FALSE;
 
+// Palette douce et professionnelle (bleu ciel, vert d'eau, corail, beige)
+double couleurs[6][3] = {
+    {0.42, 0.70, 0.98},  // Bleu ciel
+    {0.52, 0.85, 0.70},  // Vert menthe
+    {0.98, 0.70, 0.70},  // Corail doux
+    {1.00, 0.80, 0.60},  // Orange crème
+    {0.80, 0.70, 0.98},  // Lavande très claire
+    {0.65, 0.85, 0.95}   // Cyan doux
+};
 
-void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
-                        const gchar *path_string,
-                        const gchar *new_text,
-                        gpointer data) {
-    GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
-    int row = gtk_tree_path_get_indices(path)[0];
-    int col = GPOINTER_TO_INT(data);
-    GtkTreeIter iter;
-    gtk_tree_model_get_iter(GTK_TREE_MODEL(store), &iter, path);
+static gboolean animer(gpointer data) {
+    temps_actuel += 2;
+    if (temps_actuel > temps_max + 20) {
+        animation_en_cours = FALSE;
+        return FALSE;
+    }
+    gtk_widget_queue_draw(gantt_drawing_area);
+    return TRUE;
+}
 
+gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data) {
+    int width  = gtk_widget_get_allocated_width(widget);
+    int height = gtk_widget_get_allocated_height(widget);
 
-    switch (col) {
-        case COL_NOM:
-            strncpy(processus_list[row].nom, new_text, 19);
-            processus_list[row].nom[19] = '\0';
-            gtk_list_store_set(store, &iter, col, processus_list[row].nom, -1);
-            break;
-        case COL_ARRIVEE:
-            processus_list[row].arrivee = atoi(new_text);
-            gtk_list_store_set(store, &iter, col, processus_list[row].arrivee, -1);
-            break;
-        case COL_DUREE:
-            processus_list[row].duree = atoi(new_text);
-            gtk_list_store_set(store, &iter, col, processus_list[row].duree, -1);
-            break;
-        case COL_PRIORITE:
-            processus_list[row].priorite = atoi(new_text);
-             gtk_list_store_set(store, &iter, col, processus_list[row].priorite, -1);
-            break;
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+
+    if (num_processus == 0 || !algo_lance) return FALSE;
+
+    double marge_gauche = 160, marge_droite = 100, marge_haut = 80, marge_bas = 120;
+    double zone_x = width - marge_gauche - marge_droite;
+    double zone_y = height - marge_haut - marge_bas;
+
+    double echelle_x = zone_x / (temps_max + 25);
+    double hauteur_barre = 90;
+    double espacement = zone_y / (num_processus + 1);
+    if (espacement < 120) { espacement = 120; hauteur_barre = 80; }
+
+    double y0 = marge_haut + 40;
+    int temps_aff = animation_en_cours ? temps_actuel : temps_max;
+
+    for (int i = 0; i < num_processus; i++) {
+        double y = y0 + i * espacement;
+
+        cairo_set_source_rgb(cr, 0.1, 0.1, 0.15);
+        cairo_select_font_face(cr, "Segoe UI", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 36);
+        cairo_move_to(cr, 25, y + 55);
+        cairo_show_text(cr, processus_list[i].nom);
+
+        for (int s = 0; s < processus_list[i].nb_segments; s++) {
+            if (processus_list[i].diagramme_gantt[s].debut > temps_aff) continue;
+            double debut = marge_gauche + processus_list[i].diagramme_gantt[s].debut * echelle_x;
+            double fin   = marge_gauche + fmin(processus_list[i].diagramme_gantt[s].fin, temps_aff + 1) * echelle_x;
+
+            if (fin > debut) {
+                cairo_set_source_rgba(cr, couleurs[i % 6][0], couleurs[i % 6][1], couleurs[i % 6][2], 0.94);
+                cairo_rectangle(cr, debut, y + 12, fin - debut, hauteur_barre);
+                cairo_fill(cr);
+
+                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                cairo_set_line_width(cr, 3.5);
+                cairo_rectangle(cr, debut, y + 12, fin - debut, hauteur_barre);
+                cairo_stroke(cr);
+
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_select_font_face(cr, "Segoe UI", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+                cairo_set_font_size(cr, 34);
+                char txt[32];
+                snprintf(txt, sizeof(txt), "%s", processus_list[i].nom);
+                cairo_text_extents_t ext;
+                cairo_text_extents(cr, txt, &ext);
+                cairo_move_to(cr, debut + (fin - debut - ext.width) / 2, y + 62);
+                cairo_show_text(cr, txt);
+            }
+        }
     }
 
+    double y_axe = height - marge_bas + 50;
+    cairo_set_source_rgb(cr, 0.15, 0.15, 0.15);
+    cairo_set_line_width(cr, 7);
+    cairo_move_to(cr, marge_gauche, y_axe);
+    cairo_line_to(cr, width - marge_droite, y_axe);
+    cairo_stroke(cr);
+
+    for (int t = 0; t <= temps_max; t++) {
+        double x = marge_gauche + t * echelle_x;
+        if (x > width - marge_droite) break;
+
+        cairo_set_line_width(cr, 3);
+        cairo_move_to(cr, x, y_axe - 22);
+        cairo_line_to(cr, x, y_axe + 22);
+        cairo_stroke(cr);
+
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", t);
+        cairo_set_font_size(cr, 20);
+        cairo_text_extents_t ext;
+        cairo_text_extents(cr, buf, &ext);
+        cairo_move_to(cr, x - ext.width / 2, y_axe + 70);
+        cairo_show_text(cr, buf);
+    }
+
+    return FALSE;
+}
+
+void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
+                          const gchar *path_string,
+                          const gchar *new_text,
+                          gpointer data) {
+    GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
+    GtkTreeIter iter;
+    int row = gtk_tree_path_get_indices(path)[0];
+    int col = GPOINTER_TO_INT(data);
+
+    if (!gtk_tree_model_get_iter(GTK_TREE_MODEL(store), &iter, path)) {
+        gtk_tree_path_free(path);
+        return;
+    }
+
+    switch (col) {
+        case COL_NOM: strncpy(processus_list[row].nom, new_text, 19); processus_list[row].nom[19] = '\0'; break;
+        case COL_ARRIVEE: processus_list[row].arrivee = atoi(new_text); break;
+        case COL_DUREE: processus_list[row].duree = atoi(new_text); break;
+        case COL_PRIORITE: processus_list[row].priorite = atoi(new_text); break;
+    }
+    gtk_list_store_set(store, &iter, col,
+                       col == COL_NOM ? processus_list[row].nom :
+                       col == COL_ARRIVEE ? processus_list[row].arrivee :
+                       col == COL_DUREE ? processus_list[row].duree : processus_list[row].priorite, -1);
     gtk_tree_path_free(path);
 }
 
 void populate_tree_view() {
     gtk_list_store_clear(store);
-    GtkTreeIter iter;
-
     for (int i = 0; i < num_processus; i++) {
+        GtkTreeIter iter;
         gtk_list_store_append(store, &iter);
         gtk_list_store_set(store, &iter,
                            COL_NOM, processus_list[i].nom,
                            COL_ARRIVEE, processus_list[i].arrivee,
                            COL_DUREE, processus_list[i].duree,
-                           COL_PRIORITE, processus_list[i].priorite,
-                           -1);
+                           COL_PRIORITE, processus_list[i].priorite, -1);
     }
 }
 
 void load_file(const char* filename) {
     FILE *file = fopen(filename, "r");
-    if (file) {
-        char line[256];
-        num_processus = 0;
-        while (fgets(line, sizeof(line), file) && num_processus < 100) {
-            if (line[0] != '#' && strspn(line, " \t\r\n") != strlen(line)) {
-                if (sscanf(line, "%s %d %d %d",
-                           processus_list[num_processus].nom,
-                           &processus_list[num_processus].arrivee,
-                           &processus_list[num_processus].duree,
-                           &processus_list[num_processus].priorite) == 4) {
-                    num_processus++;
-                }
-            }
+    if (!file) return;
+    char line[256];
+    num_processus = 0;
+    while (fgets(line, sizeof(line), file) && num_processus < 100) {
+        if (line[0] == '#' || strspn(line, " \t\r\n") == strlen(line)) continue;
+        if (sscanf(line, "%s %d %d %d",
+                   processus_list[num_processus].nom,
+                   &processus_list[num_processus].arrivee,
+                   &processus_list[num_processus].duree,
+                   &processus_list[num_processus].priorite) == 4) {
+            num_processus++;
         }
-        fclose(file);
-        populate_tree_view();
     }
+    fclose(file);
+    populate_tree_view();
 }
 
 void open_file_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data) {
-    GtkWidget *dialog;
-    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
-    gint res;
-
-    dialog = gtk_file_chooser_dialog_new("Open File",
-                                         GTK_WINDOW(user_data),
-                                         action,
-                                         "_Cancel",
-                                         GTK_RESPONSE_CANCEL,
-                                         "_Open",
-                                         GTK_RESPONSE_ACCEPT,
-                                         NULL);
-
-    res = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (res == GTK_RESPONSE_ACCEPT) {
-        char *filename;
-        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-        filename = gtk_file_chooser_get_filename(chooser);
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Ouvrir fichier processus",
+        GTK_WINDOW(user_data), GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Annuler", GTK_RESPONSE_CANCEL,
+        "_Ouvrir", GTK_RESPONSE_ACCEPT, NULL);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
         load_file(filename);
         g_free(filename);
     }
-
     gtk_widget_destroy(dialog);
-}
-
-void add_column(GtkTreeView *treeview, const char *title, int col_num) {
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, "editable", TRUE, NULL);
-    g_signal_connect(renderer, "edited", (GCallback)cell_edited_callback, GINT_TO_POINTER(col_num));
-
-    GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(title,
-                                                                      renderer,
-                                                                      "text", col_num,
-                                                                      NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), col);
 }
 
 void populate_algorithms() {
     DIR *dir = opendir("build/politiques");
-    if (!dir) {
-        perror("Could not open build/politiques directory");
-        return;
-    }
-    
-    char *fifo_id = NULL;
-    int fifo_index = -1;
-    int current_index = 0;
-
+    if (!dir) return;
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strstr(entry->d_name, ".so")) {
+    while ((entry = readdir(dir))) {
+        if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.')
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(algorithm_combo), entry->d_name);
-            if(strcmp(entry->d_name, "fifo.so") == 0) {
-                fifo_index = current_index;
-            }
-            current_index++;
-        }
     }
     closedir(dir);
-
-    if(fifo_index != -1) {
-        gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), fifo_index);
-    }
-}
-
-
-void launch_gui(int argc, char *argv[], const char* filename) {
-    gtk_init(&argc, &argv);
-
-    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "Process Scheduler");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_add(GTK_CONTAINER(window), vbox);
-
-    GtkWidget *open_button = gtk_button_new_with_label("Open Process File");
-    g_signal_connect(open_button, "clicked", G_CALLBACK(open_file_callback), window);
-    gtk_box_pack_start(GTK_BOX(vbox), open_button, FALSE, FALSE, 0);
-
-    GtkWidget *treeview = gtk_tree_view_new();
-    add_column(GTK_TREE_VIEW(treeview), "Name", COL_NOM);
-    add_column(GTK_TREE_VIEW(treeview), "Arrival", COL_ARRIVEE);
-    add_column(GTK_TREE_VIEW(treeview), "Duration", COL_DUREE);
-    add_column(GTK_TREE_VIEW(treeview), "Priority", COL_PRIORITE);
-
-    store = gtk_list_store_new(NUM_COLS, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
-    gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(store));
-    g_object_unref(store); 
-
-    GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(scrolled_window), treeview);
-    gtk_box_pack_start(GTK_BOX(vbox), scrolled_window, TRUE, TRUE, 0);
-    
-    // Algorithm selector and run button
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    algorithm_combo = gtk_combo_box_text_new();
-    populate_algorithms();
-    g_signal_connect(algorithm_combo, "changed", G_CALLBACK(on_algorithm_changed), NULL);
-    gtk_box_pack_start(GTK_BOX(hbox), algorithm_combo, TRUE, TRUE, 0);
-
-    quantum_spin_button = gtk_spin_button_new_with_range(1, 100, 1);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(quantum_spin_button), global_quantum);
-    g_signal_connect(quantum_spin_button, "value-changed", G_CALLBACK(on_quantum_changed), NULL);
-    gtk_box_pack_start(GTK_BOX(hbox), quantum_spin_button, FALSE, FALSE, 0);
-
-
-    GtkWidget *run_button = gtk_button_new_with_label("Run Scheduler");
-    g_signal_connect(run_button, "clicked", G_CALLBACK(run_scheduler_callback), NULL);
-    gtk_box_pack_start(GTK_BOX(hbox), run_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
-    
-    // Gantt chart drawing area
-    gantt_drawing_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(gantt_drawing_area, -1, 100);
-    g_signal_connect(gantt_drawing_area, "draw", G_CALLBACK(draw_gantt_callback), NULL);
-    gtk_box_pack_start(GTK_BOX(vbox), gantt_drawing_area, FALSE, FALSE, 0);
-
-    // Results text view
-    results_text_view = gtk_text_view_new();
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(results_text_view), FALSE);
-    GtkWidget *results_scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(results_scrolled_window), results_text_view);
-    gtk_box_pack_start(GTK_BOX(vbox), results_scrolled_window, TRUE, TRUE, 0);
-
-    if (filename) {
-        load_file(filename);
-    }
-
-    gtk_widget_show_all(window);
-    on_algorithm_changed(GTK_COMBO_BOX(algorithm_combo), NULL);
-    gtk_main();
+    gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), 0);
 }
 
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UNUSED) {
@@ -242,31 +218,14 @@ void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UN
 
 void on_algorithm_changed(GtkComboBox *widget, gpointer user_data G_GNUC_UNUSED) {
     gchar *active_algo = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(widget));
-    if (active_algo == NULL) return;
-
-    // Dynamically check if the selected policy needs a quantum
+    if (!active_algo) return;
     char lib_path[256];
     snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_algo);
     g_free(active_algo);
-
-    void *lib_handle = dlopen(lib_path, RTLD_LAZY);
-    if (lib_handle) {
-        void (*definir_quantum)(int);
-        *(void **)(&definir_quantum) = dlsym(lib_handle, "definir_quantum");
-        
-        // If dlsym finds the function, show the quantum spin button
-        if (definir_quantum != NULL) {
-            gtk_widget_show(quantum_spin_button);
-        } else {
-            gtk_widget_hide(quantum_spin_button);
-        }
-        dlclose(lib_handle);
-    } else {
-        // Hide if the library can't be opened for some reason
-        gtk_widget_hide(quantum_spin_button);
-    }
+    void *handle = dlopen(lib_path, RTLD_LAZY);
+    gtk_widget_set_visible(quantum_spin_button, handle && dlsym(handle, "definir_quantum"));
+    if (handle) dlclose(handle);
 }
-
 
 void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
     gchar *active_lib = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(algorithm_combo));
@@ -276,90 +235,174 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_lib);
     g_free(active_lib);
 
-    void *lib_handle = dlopen(lib_path, RTLD_LAZY);
-    if (!lib_handle) {
-        fprintf(stderr, "Error loading %s: %s\n", lib_path, dlerror());
-        return;
-    }
+    void *handle = dlopen(lib_path, RTLD_LAZY);
+    if (!handle) return;
 
-    void (*ordonnancer)(Processus[], int);
-    *(void **)(&ordonnancer) = dlsym(lib_handle, "ordonnancer");
+    void (*ordonnancer)(Processus[], int) = dlsym(handle, "ordonnancer");
+    void (*definir_quantum)(int) = dlsym(handle, "definir_quantum");
 
-    char *error = dlerror();
-    if (error != NULL) {
-        fprintf(stderr, "Error finding symbol: %s\n", error);
-        dlclose(lib_handle);
-        return;
-    }
-    
-    for(int i = 0; i < num_processus; i++) {
+    for (int i = 0; i < num_processus; i++) {
         processus_list[i].restant = processus_list[i].duree;
         processus_list[i].nb_segments = 0;
+        processus_list[i].temps_sortie = -1;
     }
 
-    printf("Running scheduler: %s\n", lib_path);
-    fflush(stdout);
+    if (definir_quantum) definir_quantum(global_quantum);
+    if (ordonnancer) ordonnancer(processus_list, num_processus);
 
-    // Check for and call the quantum setter function if it exists
-    void (*definir_quantum)(int);
-    *(void **)(&definir_quantum) = dlsym(lib_handle, "definir_quantum");
-    if (definir_quantum != NULL) {
-        dlerror(); // Clear any old error
-        int quantum_value = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(quantum_spin_button));
-        definir_quantum(quantum_value);
-    }
+    temps_max = 0;
+    for (int i = 0; i < num_processus; i++)
+        if (processus_list[i].temps_sortie > temps_max)
+            temps_max = processus_list[i].temps_sortie;
 
-    ordonnancer(processus_list, num_processus);
-
-    printf("Scheduler finished.\n");
-    fflush(stdout);
-
-    dlclose(lib_handle);
-
+    algo_lance = TRUE;
+    animation_en_cours = TRUE;
+    temps_actuel = 0;
+    g_timeout_add(200, animer, NULL);
     gtk_widget_queue_draw(gantt_drawing_area);
-    
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(results_text_view));
-    gtk_text_buffer_set_text(buffer, "", -1);
-    char line[256];
-    
-    for (int i = 0; i < num_processus; i++) {
-        sprintf(line, "Process %s: Arrival=%d, Exit=%d\n", processus_list[i].nom, processus_list[i].arrivee, processus_list[i].temps_sortie);
-        GtkTextIter end;
-        gtk_text_buffer_get_end_iter(buffer, &end);
-        gtk_text_buffer_insert(buffer, &end, line, -1);
-    }
+
+    dlclose(handle);
 }
 
-gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNUC_UNUSED) {
-    guint width = gtk_widget_get_allocated_width(widget);
-    guint height = gtk_widget_get_allocated_height(widget);
+void launch_gui(int argc, char *argv[], const char* filename) {
+    gtk_init(&argc, &argv);
 
-    int max_time = 0;
-    for (int i = 0; i < num_processus; i++) {
-        if (processus_list[i].temps_sortie > max_time) {
-            max_time = processus_list[i].temps_sortie;
-        }
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "Ordonnanceur de Processus");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1600, 900);
+    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+    // STYLE GLOBAL DOUX ET MODERNE — 100% SANS VIOLET
+        // STYLE GLOBAL DOUX & CHALEUREUX — 100% SANS BLEU NI VIOLET
+      // STYLE GLOBAL ULTRA-CLAIR ET DOUX (gris + beige très clair)
+       // STYLE GLOBAL — FOND BEIGE TRÈS CLAIR / BLANC SALE (ultra-doux et chaleureux)
+       // STYLE GLOBAL — BLEU CLAIR TRÈS DOUX & MODERNE (2025 style)
+       // STYLE GLOBAL — COULEUR #B0C4DE (LightSteelBlue) PARTOUT
+    GtkCssProvider *global_css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(global_css,
+        "window { "
+        "   font-family: 'Segoe UI', sans-serif; "
+        "   background: #f0f4f8; "                     /* Fond très clair pour contraste */
+        "}"
+        "button { "
+        "   padding: 18px 38px; "
+        "   font-size: 17px; "
+        "   font-weight: bold; "
+        "   border-radius: 24px; "
+        "   margin: 12px; "
+        "   background: #B0C4DE; "                     /* Ta couleur exacte */
+        "   color: #2d3748; "
+        "   border: none; "
+        "   box-shadow: 0 6px 20px rgba(176,196,222,0.3); "
+        "}"
+        "button:hover { "
+        "   background: #9fb5d6; "                     /* Un peu plus foncé au hover */
+        "   transform: translateY(-4px); "
+        "   box-shadow: 0 15px 35px rgba(176,196,222,0.5); "
+        "}"
+        "combobox, spinbutton { "
+        "   font-size: 16px; "
+        "   padding: 14px; "
+        "   border-radius: 20px; "
+        "   background: white; "
+        "   border: 3px solid #B0C4DE; "               /* Bordure en #B0C4DE */
+        "}"
+        "combobox button { background: #B0C4DE; color: #2d3748; }",
+        -1, NULL);
+    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
+                                              GTK_STYLE_PROVIDER(global_css),
+                                              GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add(GTK_CONTAINER(window), main_box);
+
+    GtkWidget *top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_set_margin_start(top_bar, 25);
+    gtk_widget_set_margin_end(top_bar, 25);
+    gtk_widget_set_margin_top(top_bar, 20);
+    gtk_widget_set_margin_bottom(top_bar, 15);
+    gtk_box_pack_start(GTK_BOX(main_box), top_bar, FALSE, FALSE, 0);
+
+    GtkWidget *open_btn = gtk_button_new_with_label("Ouvrir fichier");
+    g_signal_connect(open_btn, "clicked", G_CALLBACK(open_file_callback), window);
+    gtk_box_pack_start(GTK_BOX(top_bar), open_btn, FALSE, FALSE, 0);
+
+    algorithm_combo = gtk_combo_box_text_new();
+    populate_algorithms();
+    g_signal_connect(algorithm_combo, "changed", G_CALLBACK(on_algorithm_changed), NULL);
+    gtk_box_pack_start(GTK_BOX(top_bar), algorithm_combo, TRUE, TRUE, 0);
+
+    quantum_spin_button = gtk_spin_button_new_with_range(1, 100, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(quantum_spin_button), 4);
+    g_signal_connect(quantum_spin_button, "value-changed", G_CALLBACK(on_quantum_changed), NULL);
+    gtk_box_pack_start(GTK_BOX(top_bar), quantum_spin_button, FALSE, FALSE, 0);
+
+    GtkWidget *run_btn = gtk_button_new_with_label("Lancer l'algorithme");
+    g_signal_connect(run_btn, "clicked", G_CALLBACK(run_scheduler_callback), NULL);
+    gtk_box_pack_start(GTK_BOX(top_bar), run_btn, FALSE, FALSE, 0);
+
+    gantt_drawing_area = gtk_drawing_area_new();
+    g_signal_connect(gantt_drawing_area, "draw", G_CALLBACK(draw_gantt_callback), NULL);
+    gtk_box_pack_start(GTK_BOX(main_box), gantt_drawing_area, TRUE, TRUE, 0);
+
+    // TABLEAU MAGNIFIQUE — COULEURS DOUCES
+    GtkWidget *treeview = gtk_tree_view_new();
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(treeview), TRUE);
+        GtkCssProvider *table_css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(table_css,
+        "treeview { "
+        "   font-size: 18px; "
+        "   background: white; "
+        "   border-radius: 20px; "
+        "   margin: 25px; "
+        "   box-shadow: 0 8px 32px rgba(0,0,0,0.08); "
+        "}"
+        "treeview header button { "
+        "   background: #f8f9fa; "          /* Gris très clair */
+        "   color: #495057; "
+        "   font-weight: bold; "
+        "   padding: 18px; "
+        "   font-size: 18px; "
+        "   border-bottom: 2px solid #dee2e6; "
+        "}"
+        "treeview row:nth-child(even) { background: #f8f9fa; }"
+        "treeview row:nth-child(odd)  { background: white; }"
+        "treeview row:hover { background: #e9ecef; }"
+        "treeview cell { padding: 18px; text-align: center; font-weight: 600; }",
+        -1, NULL);
+    gtk_style_context_add_provider(gtk_widget_get_style_context(treeview),
+                                   GTK_STYLE_PROVIDER(table_css),
+                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    const char *titles[] = {"Nom", "Arrivée", "Durée", "Priorité"};
+    const char *colors[] = {"#0ea5e9", "#38bdf8", "#f472b6", "#84cc16"}; // Bleu, Cyan, Rose, Vert
+
+    for (int i = 0; i < NUM_COLS; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        g_object_set(renderer,
+                     "editable", TRUE,
+                     "weight", PANGO_WEIGHT_BOLD,
+                     "foreground", colors[i],
+                     "xalign", 0.5,
+                     NULL);
+        g_signal_connect(renderer, "edited", G_CALLBACK(cell_edited_callback), GINT_TO_POINTER(i));
+        GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(
+            titles[i], renderer, "text", i, NULL);
+        gtk_tree_view_column_set_alignment(col, 0.5);
+        gtk_tree_view_column_set_expand(col, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), col);
     }
 
-    if (max_time == 0) return FALSE;
+    store = gtk_list_store_new(NUM_COLS, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
+    gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(store));
+    g_object_unref(store);
 
-    double time_scale = (double)width / max_time;
-    double bar_height = height / (num_processus + 1);
+    GtkWidget *tree_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(tree_scroll), treeview);
+    gtk_widget_set_size_request(tree_scroll, -1, 240);
+    gtk_box_pack_start(GTK_BOX(main_box), tree_scroll, FALSE, FALSE, 0);
 
-    for (int i = 0; i < num_processus; i++) {
-        for (int s = 0; s < processus_list[i].nb_segments; s++) {
-            double x = processus_list[i].diagramme_gantt[s].debut * time_scale;
-            double y = (i + 0.5) * bar_height;
-            double w = (processus_list[i].diagramme_gantt[s].fin - processus_list[i].diagramme_gantt[s].debut) * time_scale;
-            
-            cairo_set_source_rgb(cr, (i % 7) / 6.0, (i * 3 % 7) / 6.0, (i * 5 % 7) / 6.0);
-            cairo_rectangle(cr, x, y, w, bar_height * 0.8);
-            cairo_fill(cr);
-            
-            cairo_set_source_rgb(cr, 0, 0, 0);
-            cairo_move_to(cr, x + 2, y + bar_height * 0.5);
-            cairo_show_text(cr, processus_list[i].nom);
-        }
-    }
-    return FALSE;
+    if (filename) load_file(filename);
+
+    gtk_widget_show_all(window);
+    gtk_main();
 }
