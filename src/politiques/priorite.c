@@ -2,25 +2,67 @@
 #include "../processus.h"
 
 void ordonnancer(Processus p[], int n) {
-    int temps = 0, i, idx, min_prio;
+    printf("===== Ordonnancement par Priorité Préemptive =====\n");
 
-    while (temps < 10000) {
-        idx = -1; min_prio = 9999;
-        for (i = 0; i < n; i++) {
-            if (p[i].arrivee <= temps && p[i].restant > 0 && p[i].priorite < min_prio) {
-                min_prio = p[i].priorite;
-                idx = i;
+    int temps = 0;
+    int restant[n];
+    int termine = 0;
+    int courant = -1;
+    int debut_seg = 0;
+
+    for (int i = 0; i < n; i++) {
+        restant[i] = p[i].duree;
+        p[i].nb_segments = 0;
+        p[i].temps_sortie = -1;
+    }
+
+    while (termine < n) {
+        int meilleur = -1;
+        int prio_max = -1;
+
+        for (int i = 0; i < n; i++) {
+            if (p[i].arrivee <= temps && restant[i] > 0 && p[i].priorite > prio_max) {
+                prio_max = p[i].priorite;
+                meilleur = i;
             }
         }
-        if (idx == -1) { temps++; continue; }
 
-        int seg = p[idx].nb_segments++;
-        p[idx].gantt[seg].debut = temps;
-        p[idx].restant--;
+        if (meilleur == -1) {
+            temps++;
+            continue;
+        }
+
+        // Préemption : on ferme le segment du processus sortant
+        if (courant != -1 && courant != meilleur) {
+            int s = p[courant].nb_segments++;
+            p[courant].gantt[s].debut = debut_seg;
+            p[courant].gantt[s].fin = temps;
+        }
+
+        // Démarrage ou reprise
+        if (courant != meilleur) {
+            courant = meilleur;
+            debut_seg = temps;
+        }
+
+        // Exécution
+        restant[courant]--;
         temps++;
-        p[idx].gantt[seg].fin = temps;
 
-        if (p[idx].restant == 0)
-            p[idx].temps_sortie = temps;
+        if (restant[courant] == 0) {
+            int s = p[courant].nb_segments++;
+            p[courant].gantt[s].debut = debut_seg;
+            p[courant].gantt[s].fin = temps;
+            p[courant].temps_sortie = temps;
+            termine++;
+            courant = -1;
+        }
+    }
+
+    // Fermer le dernier segment
+    if (courant != -1) {
+        int s = p[courant].nb_segments++;
+        p[courant].gantt[s].debut = debut_seg;
+        p[courant].gantt[s].fin = temps;
     }
 }

@@ -1,44 +1,42 @@
-# Makefile FINAL - Mini Projet OS - Dr. Najar Yousra - 20/20 + tous les bonus
+# Makefile ULTIME – Mini Projet Ordonnancement ESI
+# Tape juste : make run processus.txt
+
 CC = gcc
-CFLAGS = -Wall -Wextra -fPIC -I src
+CFLAGS = -Wall -Wextra -fPIC -I.
 GTKFLAGS = $(shell pkg-config --cflags --libs gtk+-3.0)
-LDFLAGS = -ldl
+LDFLAGS = -ldl -lm
 
-# Dossiers
-POL_DIR = src/politiques
-BUILD_POL = build/politiques
+POL_DIR = politiques
+BUILD_DIR = build/politiques
 
-# Sources des politiques
+# Tous les .c dans politiques → tous les .so
 POL_SRCS = $(wildcard $(POL_DIR)/*.c)
-POL_LIBS = $(patsubst $(POL_DIR)/%.c,$(BUILD_POL)/%.so,$(POL_SRCS))
+POL_LIBS = $(patsubst $(POL_DIR)/%.c,$(BUILD_DIR)/%.so,$(POL_SRCS))
 
 all: main_graphique $(POL_LIBS)
 
-# Interface graphique (bonus max)
-main_graphique: src/main_graphique.o src/affichage.o
-	$(CC) $(CFLAGS) -o $@ $^ $(GTKFLAGS) $(LDFLAGS)
+main_graphique: main_graphique.o
+	$(CC) -o $@ $^ $(GTKFLAGS) $(LDFLAGS)
 
-# Version console (exigence du sujet)
-main: src/main.o src/affichage.o
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-
-# Objets
-src/%.o: src/%.c src/processus.h
+main_graphique.o: main_graphique.c processus.h
 	$(CC) $(CFLAGS) $(GTKFLAGS) -c $< -o $@
 
-# Compilation automatique des .so
-$(BUILD_POL)/%.so: $(POL_DIR)/%.c src/processus.h | $(BUILD_POL)
+$(BUILD_DIR)/%.so: $(POL_DIR)/%.c processus.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -shared -o $@ $<
 
-$(BUILD_POL):
-	mkdir -p $(BUILD_POL)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 clean:
-	rm -f main main_graphique src/*.o
+	rm -f main_graphique *.o
 	rm -rf build
 
-# LANCEMENT CORRIGÉ : prend le fichier en argument
-run: main_graphique
-	./main_graphique examples/processus.txt
+# LA COMMANDE QUE TU VAS UTILISER TOUS LES JOURS
+run: all
+	./main_graphique $(filter-out $@,$(MAKECMDGOALS))
+
+# Permet de passer le fichier en argument
+%::
+	@:
 
 .PHONY: all clean run
