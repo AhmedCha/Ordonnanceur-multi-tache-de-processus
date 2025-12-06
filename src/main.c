@@ -8,7 +8,7 @@
 #include "processus.h"
 #include <glib.h>
 
-void launch_gui(int argc, char *argv[]);
+void launch_gui(int argc, char *argv[], const char* filename);
 
 int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
     FILE *fichier = fopen(chemin_fichier, "r");
@@ -76,34 +76,57 @@ int menu_interactif(char *options[], int nombre_options) {
 }
 
 int main(int argc, char *argv[]) {
-    // Use memory backend to avoid dconf warnings
-    g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+    int run_gui = 1;
+    const char* filename = NULL;
 
-    // Launch the GUI
-    launch_gui(argc, argv);
-    return 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--tui") == 0) {
+            run_gui = 0;
+        } else if (strcmp(argv[i], "--gui") == 0) {
+            run_gui = 1;
+        } else if (argv[i][0] != '-') {
+            filename = argv[i];
+        }
+    }
 
-
-    if (argc < 2) {
-        printf("Usage: %s <fichier_configuration>\n", argv[0]);
+    if (filename != NULL) {
+        int gui_flag_present = 0;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--gui") == 0) {
+                gui_flag_present = 1;
+                break;
+            }
+        }
+        if (!gui_flag_present) {
+            run_gui = 0;
+        }
+    }
+    
+    if (run_gui) {
+        g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+        launch_gui(argc, argv, filename);
+        return 0;
+    }
+    
+    if (filename == NULL) {
+        printf("Usage (TUI mode): %s <fichier_configuration> [--tui]\n", argv[0]);
+        printf("Usage (GUI mode): %s [--gui] [fichier_configuration]\n", argv[0]);
         return 1;
     }
 
     DIR *repertoire = opendir("build/politiques");
     if (!repertoire) {
-        perror("Erreur ouverture dossier politiques/");
+        perror("Erreur ouverture dossier build/politiques");
         return 1;
     }
 
     struct dirent *entree_dir;
     char *tableau_politiques[50];
     int nb_politiques = 0;
-
     char *nom_politique_fifo = NULL;
 
     while ((entree_dir = readdir(repertoire)) != NULL) {
         if (strstr(entree_dir->d_name, ".so")) {
-
             if (strncmp(entree_dir->d_name, "fifo", 4) == 0) {
                 nom_politique_fifo = strdup(entree_dir->d_name);
             } else {
@@ -129,7 +152,7 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         Processus tableau_processus[100];
-        int nb_processus = lire_processus(argv[1], tableau_processus);
+        int nb_processus = lire_processus((char*)filename, tableau_processus);
 
         int index_selection = menu_interactif(tableau_politiques, nb_politiques);
 
@@ -152,7 +175,7 @@ int main(int argc, char *argv[]) {
         char *error = dlerror();
         if (error != NULL) {
             fprintf(stderr, "Erreur symbole : %s\n", error);
-          dlclose(bibliotheque);
+            dlclose(bibliotheque);
             continue;
         }
 
@@ -160,6 +183,17 @@ int main(int argc, char *argv[]) {
             dlclose(bibliotheque);
             continue;
         } 
+        void (*definir_quantum)(int);
+        *(void **)(&definir_quantum) = dlsym(bibliotheque, "definir_quantum");
+        dlerror();
+        if (definir_quantum != NULL) {
+            int quantum_val = 0;
+            printf("Cette politique utilise un quantum. Entrez la valeur du quantum: ");
+            scanf("%d", &quantum_val);
+            while(getchar() != '\n');
+            definir_quantum(quantum_val);
+        }
+
         ordonnancer(tableau_processus, nb_processus);
 
         afficher_resultats(tableau_processus, nb_processus);
@@ -174,4 +208,5 @@ int main(int argc, char *argv[]) {
         free(tableau_politiques[i]);
     }
 
-    return 0;}
+    return 0;
+}

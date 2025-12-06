@@ -15,4 +15,3 @@ Projet ;)
 * Run the compiled code
 
 `./main`
-

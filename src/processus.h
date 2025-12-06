@@ -1,7 +1,7 @@
 #ifndef PROCESSUS_H
 #define PROCESSUS_H
 
-#define MAX_SEGMENTS_GANTT 50
+#define MAX_SEGMENTS_GANTT 250
 
 typedef struct {
     int debut;

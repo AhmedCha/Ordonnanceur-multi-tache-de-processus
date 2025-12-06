@@ -7,7 +7,6 @@
 #include <dirent.h>
 #include <dlfcn.h>
 
-// Enums for the columns in the GtkTreeView
 enum {
     COL_NOM,
     COL_ARRIVEE,
@@ -23,16 +22,14 @@ static GtkWidget *gantt_drawing_area;
 static GtkWidget *results_text_view;
 static GtkWidget *algorithm_combo;
 static GtkWidget *quantum_spin_button;
-int global_quantum = 4; // Default quantum
+int global_quantum = 4; 
 
-// Forward declaration
 void run_scheduler_callback(GtkButton *button, gpointer user_data);
 gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data);
 void on_algorithm_changed(GtkComboBox *widget, gpointer user_data);
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data);
 
 
-// Callback function for when a cell is edited
 void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
                         const gchar *path_string,
                         const gchar *new_text,
@@ -67,8 +64,6 @@ void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
     gtk_tree_path_free(path);
 }
 
-
-// Function to populate the GtkTreeView with process data
 void populate_tree_view() {
     gtk_list_store_clear(store);
     GtkTreeIter iter;
@@ -84,8 +79,27 @@ void populate_tree_view() {
     }
 }
 
+void load_file(const char* filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        char line[256];
+        num_processus = 0;
+        while (fgets(line, sizeof(line), file) && num_processus < 100) {
+            if (line[0] != '#' && strspn(line, " \t\r\n") != strlen(line)) {
+                if (sscanf(line, "%s %d %d %d",
+                           processus_list[num_processus].nom,
+                           &processus_list[num_processus].arrivee,
+                           &processus_list[num_processus].duree,
+                           &processus_list[num_processus].priorite) == 4) {
+                    num_processus++;
+                }
+            }
+        }
+        fclose(file);
+        populate_tree_view();
+    }
+}
 
-// Callback function for opening a file
 void open_file_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data) {
     GtkWidget *dialog;
     GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
@@ -105,32 +119,13 @@ void open_file_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data) {
         char *filename;
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         filename = gtk_file_chooser_get_filename(chooser);
-        
-        FILE *file = fopen(filename, "r");
-        if (file) {
-            char line[256];
-            num_processus = 0;
-            while (fgets(line, sizeof(line), file) && num_processus < 100) {
-                if (line[0] != '#' && strspn(line, " \t\r\n") != strlen(line)) {
-                    if (sscanf(line, "%s %d %d %d",
-                               processus_list[num_processus].nom,
-                               &processus_list[num_processus].arrivee,
-                               &processus_list[num_processus].duree,
-                               &processus_list[num_processus].priorite) == 4) {
-                        num_processus++;
-                    }
-                }
-            }
-            fclose(file);
-            populate_tree_view();
-        }
+        load_file(filename);
         g_free(filename);
     }
 
     gtk_widget_destroy(dialog);
 }
 
-// Function to add a column to the GtkTreeView
 void add_column(GtkTreeView *treeview, const char *title, int col_num) {
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
     g_object_set(renderer, "editable", TRUE, NULL);
@@ -143,7 +138,6 @@ void add_column(GtkTreeView *treeview, const char *title, int col_num) {
     gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), col);
 }
 
-// Populate algorithm selector
 void populate_algorithms() {
     DIR *dir = opendir("build/politiques");
     if (!dir) {
@@ -173,8 +167,7 @@ void populate_algorithms() {
 }
 
 
-// Function to create and show the main GUI window
-void launch_gui(int argc, char *argv[]) {
+void launch_gui(int argc, char *argv[], const char* filename) {
     gtk_init(&argc, &argv);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -234,6 +227,10 @@ void launch_gui(int argc, char *argv[]) {
     gtk_container_add(GTK_CONTAINER(results_scrolled_window), results_text_view);
     gtk_box_pack_start(GTK_BOX(vbox), results_scrolled_window, TRUE, TRUE, 0);
 
+    if (filename) {
+        load_file(filename);
+    }
+
     gtk_widget_show_all(window);
     on_algorithm_changed(GTK_COMBO_BOX(algorithm_combo), NULL);
     gtk_main();
@@ -245,13 +242,28 @@ void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UN
 
 void on_algorithm_changed(GtkComboBox *widget, gpointer user_data G_GNUC_UNUSED) {
     gchar *active_algo = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(widget));
-    if (active_algo != NULL) {
-        if (strcmp(active_algo, "round_robin.so") == 0) {
+    if (active_algo == NULL) return;
+
+    // Dynamically check if the selected policy needs a quantum
+    char lib_path[256];
+    snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_algo);
+    g_free(active_algo);
+
+    void *lib_handle = dlopen(lib_path, RTLD_LAZY);
+    if (lib_handle) {
+        void (*definir_quantum)(int);
+        *(void **)(&definir_quantum) = dlsym(lib_handle, "definir_quantum");
+        
+        // If dlsym finds the function, show the quantum spin button
+        if (definir_quantum != NULL) {
             gtk_widget_show(quantum_spin_button);
         } else {
             gtk_widget_hide(quantum_spin_button);
         }
-        g_free(active_algo);
+        dlclose(lib_handle);
+    } else {
+        // Hide if the library can't be opened for some reason
+        gtk_widget_hide(quantum_spin_button);
     }
 }
 
@@ -259,8 +271,6 @@ void on_algorithm_changed(GtkComboBox *widget, gpointer user_data G_GNUC_UNUSED)
 void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
     gchar *active_lib = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(algorithm_combo));
     if (!active_lib) return;
-
-    // The global_quantum is now updated by the on_quantum_changed callback
 
     char lib_path[256];
     snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_lib);
@@ -282,7 +292,6 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
         return;
     }
     
-    // Reset data
     for(int i = 0; i < num_processus; i++) {
         processus_list[i].restant = processus_list[i].duree;
         processus_list[i].nb_segments = 0;
@@ -291,6 +300,15 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     printf("Running scheduler: %s\n", lib_path);
     fflush(stdout);
 
+    // Check for and call the quantum setter function if it exists
+    void (*definir_quantum)(int);
+    *(void **)(&definir_quantum) = dlsym(lib_handle, "definir_quantum");
+    if (definir_quantum != NULL) {
+        dlerror(); // Clear any old error
+        int quantum_value = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(quantum_spin_button));
+        definir_quantum(quantum_value);
+    }
+
     ordonnancer(processus_list, num_processus);
 
     printf("Scheduler finished.\n");
@@ -298,7 +316,6 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
 
     dlclose(lib_handle);
 
-    // Update results and Gantt chart
     gtk_widget_queue_draw(gantt_drawing_area);
     
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(results_text_view));
@@ -313,7 +330,6 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     }
 }
 
-// Draw the Gantt chart
 gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNUC_UNUSED) {
     guint width = gtk_widget_get_allocated_width(widget);
     guint height = gtk_widget_get_allocated_height(widget);
@@ -336,7 +352,7 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNU
             double y = (i + 0.5) * bar_height;
             double w = (processus_list[i].diagramme_gantt[s].fin - processus_list[i].diagramme_gantt[s].debut) * time_scale;
             
-            cairo_set_source_rgb(cr, (i % 7) / 6.0, (i * 3 % 7) / 6.0, (i * 5 % 7) / 6.0); // Simple color variation
+            cairo_set_source_rgb(cr, (i % 7) / 6.0, (i * 3 % 7) / 6.0, (i * 5 % 7) / 6.0);
             cairo_rectangle(cr, x, y, w, bar_height * 0.8);
             cairo_fill(cr);
             

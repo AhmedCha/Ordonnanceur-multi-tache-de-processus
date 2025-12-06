@@ -1,10 +1,16 @@
 #include <stdio.h>
 #include "../processus.h"
 
-extern int global_quantum;
+static int quantum_rr = 4; 
+
+void definir_quantum(int q) {
+    if (q > 0) {
+        quantum_rr = q;
+    }
+}
 
 void ordonnancer(Processus tableau_processus[], int nombre_processus) {
-    int quantum = global_quantum;
+    int quantum = quantum_rr;
     printf("===== Ordonnancement Round Robin (Quantum: %d) =====\n", quantum);
 
     int temps_restant[nombre_processus];
