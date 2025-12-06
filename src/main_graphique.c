@@ -1,56 +1,53 @@
-    // src/main_graphique.c  VERSION 100% FONCTIONNELLE (Round Robin + popup quantum)
-    #include <gtk/gtk.h>
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-    #include <dlfcn.h>
-    #include <math.h>
-    #include "processus.h"
+// main_graphique.c – VERSION FINALE PROPRE – SANS MENU, TEMPS TOUS NUMÉROTÉS
+#include <gtk/gtk.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dlfcn.h>
+#include <math.h>
+#include "processus.h"
 
-    Processus procs[100];
-    int nprocs = 0;
-    GtkWidget *drawing_area;
-    int temps_actuel = 0;
-    int temps_max = 0;
-    gboolean animation_en_cours = FALSE;
-    gboolean algo_lance = FALSE;
+Processus procs[100];
+int nprocs = 0;
+GtkWidget *drawing_area;
+int temps_actuel = 0;
+int temps_max = 0;
+gboolean animation_en_cours = FALSE;
+gboolean algo_lance = FALSE;
 
-    double couleurs[6][3] = {
-        {0.1, 0.5, 1.0}, {0.0, 0.8, 0.4}, {1.0, 0.3, 0.3},
-        {0.9, 0.6, 0.0}, {0.8, 0.2, 0.9}, {0.0, 0.7, 0.9}
-    };
+double couleurs[6][3] = {
+    {0.11, 0.53, 0.98}, {0.35, 0.78, 0.60}, {0.95, 0.45, 0.45},
+    {1.00, 0.70, 0.30}, {0.75, 0.50, 0.95}, {0.00, 0.70, 0.80}
+};
 
-    void lire_processus(const char *f) {
-        FILE *fp = fopen(f, "r");
-        if (!fp) return;
-        char ligne[256];
-        nprocs = 0;
-        while (fgets(ligne, sizeof(ligne), fp) && nprocs < 100) {
-            if (ligne[0] == '#' || ligne[0] == '\n') continue;
-            sscanf(ligne, "%s %d %d %d", procs[nprocs].nom, &procs[nprocs].arrivee,
-                &procs[nprocs].duree, &procs[nprocs].priorite);
-            procs[nprocs].restant = procs[nprocs].duree;
-            procs[nprocs].nb_segments = 0;
-            procs[nprocs].temps_sortie = -1;
-            nprocs++;
-        }
-        fclose(fp);
+void lire_processus(const char *f) {
+    FILE *fp = fopen(f, "r");
+    if (!fp) return;
+    char ligne[256];
+    nprocs = 0;
+    while (fgets(ligne, sizeof(ligne), fp) && nprocs < 100) {
+        if (ligne[0] == '#' || ligne[0] == '\n') continue;
+        sscanf(ligne, "%s %d %d %d", procs[nprocs].nom, &procs[nprocs].arrivee,
+               &procs[nprocs].duree, &procs[nprocs].priorite);
+        procs[nprocs].restant = procs[nprocs].duree;
+        procs[nprocs].nb_segments = 0;
+        procs[nprocs].temps_sortie = -1;
+        nprocs++;
     }
+    fclose(fp);
+}
 
-    static gboolean animer(gpointer data) {
-        temps_actuel++;
-        if (temps_actuel > temps_max + 5) {
-            animation_en_cours = FALSE;
-            return FALSE;
-        }
-        gtk_widget_queue_draw(drawing_area);
-        return TRUE;
+static gboolean animer(gpointer data) {
+    temps_actuel++;
+    if (temps_actuel > temps_max + 10) {
+        animation_en_cours = FALSE;
+        return FALSE;
     }
+    gtk_widget_queue_draw(drawing_area);
+    return TRUE;
+}
 
-    // POPUP QUANTUM + LANCEMENT CORRECT
-    // VERSION PRO – PLUS DE RECOMPILATION, QUANTUM PASSÉ DIRECTEMENT
 void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
-    // ARRÊT IMMÉDIAT DE TOUTE ANIMATION EN COURS
     animation_en_cours = FALSE;
     algo_lance = FALSE;
     temps_actuel = 0;
@@ -65,8 +62,8 @@ void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
                                                    NULL);
 
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(content), box, TRUE, TRUE, 10);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_box_pack_start(GTK_BOX(content), box, TRUE, TRUE, 20);
 
     gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Quantum : "), FALSE, FALSE, 10);
     GtkWidget *entry = gtk_entry_new();
@@ -79,202 +76,211 @@ void demander_quantum_et_lancer(GtkWidget *widget, gpointer data) {
         int q = atoi(gtk_entry_get_text(GTK_ENTRY(entry)));
         if (q < 1) q = 4;
 
-        // Charger le .so normal (compilé une fois)
         void *handle = dlopen("./build/politiques/round_robin.so", RTLD_LAZY);
-        if (!handle) {
-            g_print("ERREUR: round_robin.so non trouvé\n");
-            gtk_widget_destroy(dialog);
-            return;
-        }
+        if (!handle) return;
 
         void (*rr)(Processus[], int, int) = dlsym(handle, "ordonnancer");
-        if (!rr) {
-            g_print("ERREUR: fonction ordonnancer non trouvée\n");
-            dlclose(handle);
-            gtk_widget_destroy(dialog);
-            return;
-        }
+        if (!rr) { dlclose(handle); return; }
 
-        // Réinitialiser
         for (int i = 0; i < nprocs; i++) {
             procs[i].restant = procs[i].duree;
             procs[i].nb_segments = 0;
             procs[i].temps_sortie = -1;
         }
 
-        // Exécuter avec le quantum choisi
         rr(procs, nprocs, q);
 
-        // Calculer temps_max
         temps_max = 0;
-        for (int i = 0; i < nprocs; i++) {
+        for (int i = 0; i < nprocs; i++)
             if (procs[i].temps_sortie > temps_max)
                 temps_max = procs[i].temps_sortie;
-        }
 
-        // Lancer l'animation
         algo_lance = TRUE;
         animation_en_cours = TRUE;
         temps_actuel = 0;
         g_timeout_add(600, animer, NULL);
         gtk_widget_queue_draw(drawing_area);
-
         dlclose(handle);
     }
     gtk_widget_destroy(dialog);
 }
-    // Lancer un algo (ne touche PLUS à algo_lance ici)
-    void lancer_algo(GtkWidget *w, gpointer data) {
-        const char *algo = (const char*)data;
-        char path[256];
-        snprintf(path, sizeof(path), "./build/politiques/%s.so", algo);
-        void *h = dlopen(path, RTLD_LAZY);
-        if (!h) return;
 
-        void (*f)(Processus[], int) = dlsym(h, "ordonnancer");
-        if (!f) { dlclose(h); return; }
+void lancer_algo(GtkWidget *w, gpointer data) {
+    animation_en_cours = FALSE;
+    algo_lance = FALSE;
+    temps_actuel = 0;
+    temps_max = 0;
+    gtk_widget_queue_draw(drawing_area);
 
-        for (int i = 0; i < nprocs; i++) {
-            procs[i].restant = procs[i].duree;
-            procs[i].nb_segments = 0;
-            procs[i].temps_sortie = -1;
-        }
+    const char *algo = (const char*)data;
+    char path[256];
+    snprintf(path, sizeof(path), "./build/politiques/%s.so", algo);
+    void *h = dlopen(path, RTLD_LAZY);
+    if (!h) return;
 
-        temps_actuel = 0;
-        temps_max = 0;
-        f(procs, nprocs);
+    void (*f)(Processus[], int) = dlsym(h, "ordonnancer");
+    if (!f) { dlclose(h); return; }
 
-        for (int i = 0; i < nprocs; i++)
-            if (procs[i].temps_sortie > temps_max)
-                temps_max = procs[i].temps_sortie;
-
-        algo_lance = TRUE;                    // ON GARDE ÇA ICI
-        animation_en_cours = TRUE;
-        g_timeout_add(600, animer, NULL);
-        gtk_widget_queue_draw(drawing_area);
-        dlclose(h);
+    for (int i = 0; i < nprocs; i++) {
+        procs[i].restant = procs[i].duree;
+        procs[i].nb_segments = 0;
+        procs[i].temps_sortie = -1;
     }
-    static gboolean dessiner_gantt(GtkWidget *widget, cairo_t *cr, gpointer data) {
-        int width = gtk_widget_get_allocated_width(widget);
-        int height = gtk_widget_get_allocated_height(widget);
 
-        cairo_set_source_rgb(cr, 1, 1, 1);
-        cairo_paint(cr);
+    f(procs, nprocs);
 
-        if (nprocs == 0 || !algo_lance) {
-            cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
-            cairo_set_font_size(cr, 40);
-            cairo_move_to(cr, width/2 - 300, height/2);
-            cairo_show_text(cr, "Choisissez un algorithme");
-            return FALSE;
-        }
+    temps_max = 0;
+    for (int i = 0; i < nprocs; i++)
+        if (procs[i].temps_sortie > temps_max)
+            temps_max = procs[i].temps_sortie;
 
-        double echelle_x = 40.0;
-        double y0 = 120;
-        double hauteur_barre = 70;
-        double espacement = 100;
+    algo_lance = TRUE;
+    animation_en_cours = TRUE;
+    temps_actuel = 0;
+    g_timeout_add(600, animer, NULL);
+    gtk_widget_queue_draw(drawing_area);
+    dlclose(h);
+}
 
-        int temps_aff = animation_en_cours ? temps_actuel : temps_max;
+static gboolean dessiner_gantt(GtkWidget *widget, cairo_t *cr, gpointer data) {
+    int width = gtk_widget_get_allocated_width(widget);
+    int height = gtk_widget_get_allocated_height(widget);
 
-        // Processus + barres
-        for (int i = 0; i < nprocs; i++) {
-            double y = y0 + i * espacement;
+    cairo_set_source_rgb(cr, 0.97, 0.97, 0.98);
+    cairo_paint(cr);
 
-            cairo_set_source_rgb(cr, 0, 0, 0);
-            cairo_set_font_size(cr, 28);
-            cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-            cairo_move_to(cr, 50, y + 50);
-            cairo_show_text(cr, procs[i].nom);
-
-            for (int s = 0; s < procs[i].nb_segments; s++) {
-                if (procs[i].gantt[s].debut > temps_aff) continue;
-
-                double debut = 200 + procs[i].gantt[s].debut * echelle_x;
-                double fin = 200 + fmin(procs[i].gantt[s].fin, temps_aff + 1) * echelle_x;
-
-                if (fin > debut) {
-                    cairo_set_source_rgb(cr, couleurs[i % 6][0], couleurs[i % 6][1], couleurs[i % 6][2]);
-                    cairo_rectangle(cr, debut, y + 10, fin - debut, hauteur_barre);
-                    cairo_fill(cr);
-
-                    cairo_set_source_rgb(cr, 0, 0, 0);
-                    cairo_set_line_width(cr, 3);
-                    cairo_rectangle(cr, debut, y + 10, fin - debut, hauteur_barre);
-                    cairo_stroke(cr);
-
-                    cairo_set_source_rgb(cr, 1, 1, 1);
-                    cairo_set_font_size(cr, 24);
-                    char txt[50];
-                    snprintf(txt, sizeof(txt), "%s", procs[i].nom);
-                    cairo_text_extents_t extents;
-                    cairo_text_extents(cr, txt, &extents);
-                    cairo_move_to(cr, debut + (fin - debut - extents.width)/2, y + 45);
-                    cairo_show_text(cr, txt);
-                }
-            }
-        }
-
-        // Axe temps en bas
-        double y_axe = y0 + nprocs * espacement + 50;
-        cairo_set_source_rgb(cr, 0, 0, 0);
-        cairo_set_line_width(cr, 6);
-        cairo_move_to(cr, 200, y_axe);
-        cairo_line_to(cr, 200 + (temps_max + 10) * echelle_x, y_axe);
-        cairo_stroke(cr);
-
-        for (int t = 0; t <= temps_max + 5; t++) {
-            double x = 200 + t * echelle_x;
-            if (x > width - 100) break;
-            cairo_move_to(cr, x, y_axe - 20);
-            cairo_line_to(cr, x, y_axe + 20);
-            cairo_stroke(cr);
-
-            char buf[10];
-            snprintf(buf, sizeof(buf), "%d", t);
-            cairo_set_font_size(cr, 20);
-            cairo_move_to(cr, x - 15, y_axe + 45);
-            cairo_show_text(cr, buf);
-        }
-
+    if (nprocs == 0 || !algo_lance) {
+        cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
+        cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 42);
+        cairo_move_to(cr, width/2 - 280, height/2);
+        cairo_show_text(cr, "Choisissez un algorithme");
         return FALSE;
     }
 
-    int main(int argc, char **argv) {
-        if (argc < 2) return 1;
-        lire_processus(argv[1]);
+    double echelle_x = 45.0;
+    double y0 = 140;
+    double hauteur_barre = 75;
+    double espacement = 110;
 
-        gtk_init(&argc, &argv);
+    int temps_aff = animation_en_cours ? temps_actuel : temps_max;
 
-        GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-        gtk_window_set_title(GTK_WINDOW(win), "Ordonnanceur ESI - Gantt Pro");
-        gtk_window_set_default_size(GTK_WINDOW(win), 1700, 900);
-        g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    for (int i = 0; i < nprocs; i++) {
+        double y = y0 + i * espacement;
 
-        GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
-        gtk_container_add(GTK_CONTAINER(win), box);
+        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+        cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 32);
+        cairo_move_to(cr, 60, y + 50);
+        cairo_show_text(cr, procs[i].nom);
 
-        GtkWidget *btns = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-        gtk_box_pack_start(GTK_BOX(box), btns, FALSE, FALSE, 20);
+        for (int s = 0; s < procs[i].nb_segments; s++) {
+            if (procs[i].gantt[s].debut > temps_aff) continue;
 
-        const char *algos[] = {"fifo", "priorite", "round_robin", "mlfq", "aging", NULL};
-        for (int i = 0; algos[i]; i++) {
-            GtkWidget *b;
-            if (strcmp(algos[i], "round_robin") == 0) {
-                b = gtk_button_new_with_label("Round Robin");
-                g_signal_connect(b, "clicked", G_CALLBACK(demander_quantum_et_lancer), NULL);
-            } else {
-                b = gtk_button_new_with_label(algos[i]);
-                g_signal_connect(b, "clicked", G_CALLBACK(lancer_algo), (gpointer)algos[i]);
+            double debut = 220 + procs[i].gantt[s].debut * echelle_x;
+            double fin = 220 + fmin(procs[i].gantt[s].fin, temps_aff + 1) * echelle_x;
+
+            if (fin > debut) {
+                cairo_set_source_rgba(cr, couleurs[i % 6][0], couleurs[i % 6][1], couleurs[i % 6][2], 0.9);
+                cairo_rectangle(cr, debut, y + 12, fin - debut, hauteur_barre);
+                cairo_fill(cr);
+
+                cairo_set_source_rgb(cr, 0.15, 0.15, 0.15);
+                cairo_set_line_width(cr, 2.5);
+                cairo_rectangle(cr, debut, y + 12, fin - debut, hauteur_barre);
+                cairo_stroke(cr);
+
+                cairo_set_source_rgb(cr, 1, 1, 1);
+                cairo_set_font_size(cr, 26);
+                char txt[50];
+                snprintf(txt, sizeof(txt), "%s", procs[i].nom);
+                cairo_text_extents_t extents;
+                cairo_text_extents(cr, txt, &extents);
+                cairo_move_to(cr, debut + (fin - debut - extents.width)/2, y + 50);
+                cairo_show_text(cr, txt);
             }
-            gtk_widget_set_size_request(b, 240, 90);
-            gtk_box_pack_start(GTK_BOX(btns), b, FALSE, FALSE, 10);
         }
-
-        drawing_area = gtk_drawing_area_new();
-        g_signal_connect(drawing_area, "draw", G_CALLBACK(dessiner_gantt), NULL);
-        gtk_box_pack_start(GTK_BOX(box), drawing_area, TRUE, TRUE, 0);
-
-        gtk_widget_show_all(win);
-        gtk_main();
-        return 0;
     }
+
+    // Axe temps – TOUS LES CHIFFRES (0 1 2 3 4 5 ...)
+    double y_axe = y0 + nprocs * espacement + 60;
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_set_line_width(cr, 5);
+    cairo_move_to(cr, 220, y_axe);
+    cairo_line_to(cr, 220 + (temps_max + 15) * echelle_x, y_axe);
+    cairo_stroke(cr);
+
+    for (int t = 0; t <= temps_max + 10; t++) {
+        double x = 220 + t * echelle_x;
+        if (x > width - 100) break;
+
+        cairo_set_line_width(cr, 2);
+        cairo_move_to(cr, x, y_axe - 15);
+        cairo_line_to(cr, x, y_axe + 15);
+        cairo_stroke(cr);
+
+        // TOUS LES CHIFFRES SONT AFFICHÉS
+        char buf[10];
+        snprintf(buf, sizeof(buf), "%d", t);
+        cairo_set_font_size(cr, 18);
+        cairo_move_to(cr, x - 12, y_axe + 40);
+        cairo_show_text(cr, buf);
+    }
+
+    // Titre centré
+    cairo_set_source_rgb(cr, 0.15, 0.4, 0.7);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 48);
+    cairo_move_to(cr, width/2 - 300, 70);
+    cairo_show_text(cr, "Diagramme de Gantt");
+
+    return FALSE;
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) return 1;
+    lire_processus(argv[1]);
+
+    gtk_init(&argc, &argv);
+
+    GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(win), "Diagramme de Gantt");
+    gtk_window_set_default_size(GTK_WINDOW(win), 1800, 1000);
+    g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+    GtkCssProvider *provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(provider,
+        "window { background-color: #f8f9fa; }"
+        "button { background-color: #e3f2fd; color: #1565c0; font-weight: bold; padding: 15px; margin: 10px; border-radius: 12px; }"
+        "button:hover { background-color: #bbdefb; }"
+        , -1, NULL);
+    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
+                                              GTK_STYLE_PROVIDER(provider),
+                                              GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+    gtk_container_add(GTK_CONTAINER(win), main_box);
+
+    // Gros boutons en bas (seuls visibles)
+    GtkWidget *btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_box_pack_start(GTK_BOX(main_box), btn_box, FALSE, FALSE, 30);
+
+    const char *algos[] = {"FIFO", "Priorite", "Round Robin", "MLFQ", "Aging", NULL};
+    for (int i = 0; algos[i]; i++) {
+        GtkWidget *b = gtk_button_new_with_label(algos[i]);
+        gtk_widget_set_size_request(b, 240, 90);
+        if (strcmp(algos[i], "Round Robin") == 0)
+            g_signal_connect(b, "clicked", G_CALLBACK(demander_quantum_et_lancer), NULL);
+        else
+            g_signal_connect(b, "clicked", G_CALLBACK(lancer_algo), (gpointer)algos[i]);
+        gtk_box_pack_start(GTK_BOX(btn_box), b, TRUE, TRUE, 10);
+    }
+
+    drawing_area = gtk_drawing_area_new();
+    g_signal_connect(drawing_area, "draw", G_CALLBACK(dessiner_gantt), NULL);
+    gtk_box_pack_start(GTK_BOX(main_box), drawing_area, TRUE, TRUE, 0);
+
+    gtk_widget_show_all(win);
+    gtk_main();
+    return 0;
+}
