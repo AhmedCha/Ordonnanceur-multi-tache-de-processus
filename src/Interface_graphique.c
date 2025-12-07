@@ -29,6 +29,21 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data);
 void on_algorithm_changed(GtkComboBox *widget, gpointer user_data);
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data);
 
+// Pastel color palette (RGB values normalized to 0-1 range)
+static const double PASTEL_COLORS[][3] = {
+    {0.996, 0.753, 0.796},  // Pastel Pink
+    {0.729, 0.855, 0.996},  // Pastel Blue
+    {0.765, 0.996, 0.753},  // Pastel Green
+    {0.996, 0.914, 0.667},  // Pastel Yellow
+    {0.918, 0.753, 0.996},  // Pastel Purple
+    {0.996, 0.847, 0.753},  // Pastel Peach
+    {0.753, 0.996, 0.929},  // Pastel Mint
+    {0.996, 0.753, 0.867},  // Pastel Rose
+    {0.839, 0.918, 0.996},  // Pastel Sky
+    {0.933, 0.996, 0.753}   // Pastel Lime
+};
+
+static const int NUM_PASTEL_COLORS = 10;
 
 void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
                         const gchar *path_string,
@@ -39,7 +54,6 @@ void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
     int col = GPOINTER_TO_INT(data);
     GtkTreeIter iter;
     gtk_tree_model_get_iter(GTK_TREE_MODEL(store), &iter, path);
-
 
     switch (col) {
         case COL_NOM:
@@ -166,13 +180,12 @@ void populate_algorithms() {
     }
 }
 
-
 void launch_gui(int argc, char *argv[], const char* filename) {
     gtk_init(&argc, &argv);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Process Scheduler");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
+    gtk_window_set_default_size(GTK_WINDOW(window), 1400, 900);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -208,15 +221,14 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     g_signal_connect(quantum_spin_button, "value-changed", G_CALLBACK(on_quantum_changed), NULL);
     gtk_box_pack_start(GTK_BOX(hbox), quantum_spin_button, FALSE, FALSE, 0);
 
-
     GtkWidget *run_button = gtk_button_new_with_label("Run Scheduler");
     g_signal_connect(run_button, "clicked", G_CALLBACK(run_scheduler_callback), NULL);
     gtk_box_pack_start(GTK_BOX(hbox), run_button, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
     
-    // Gantt chart drawing area
+    // Gantt chart drawing area - increased height to accommodate timeline
     gantt_drawing_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(gantt_drawing_area, -1, 100);
+    gtk_widget_set_size_request(gantt_drawing_area, -1, 300);
     g_signal_connect(gantt_drawing_area, "draw", G_CALLBACK(draw_gantt_callback), NULL);
     gtk_box_pack_start(GTK_BOX(vbox), gantt_drawing_area, FALSE, FALSE, 0);
 
@@ -266,7 +278,6 @@ void on_algorithm_changed(GtkComboBox *widget, gpointer user_data G_GNUC_UNUSED)
         gtk_widget_hide(quantum_spin_button);
     }
 }
-
 
 void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
     gchar *active_lib = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(algorithm_combo));
@@ -343,23 +354,81 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNU
 
     if (max_time == 0) return FALSE;
 
+    // Reserve space for timeline at the bottom
+    int timeline_height = 40;
+    int chart_height = height - timeline_height;
+    
     double time_scale = (double)width / max_time;
-    double bar_height = height / (num_processus + 1);
+    double bar_height = chart_height / (num_processus + 1);
 
+    // Draw process bars
     for (int i = 0; i < num_processus; i++) {
         for (int s = 0; s < processus_list[i].nb_segments; s++) {
             double x = processus_list[i].diagramme_gantt[s].debut * time_scale;
             double y = (i + 0.5) * bar_height;
             double w = (processus_list[i].diagramme_gantt[s].fin - processus_list[i].diagramme_gantt[s].debut) * time_scale;
             
-            cairo_set_source_rgb(cr, (i % 7) / 6.0, (i * 3 % 7) / 6.0, (i * 5 % 7) / 6.0);
+            // Use pastel colors from the palette
+            int color_idx = i % NUM_PASTEL_COLORS;
+            cairo_set_source_rgb(cr, 
+                                PASTEL_COLORS[color_idx][0], 
+                                PASTEL_COLORS[color_idx][1], 
+                                PASTEL_COLORS[color_idx][2]);
             cairo_rectangle(cr, x, y, w, bar_height * 0.8);
             cairo_fill(cr);
             
-            cairo_set_source_rgb(cr, 0, 0, 0);
+            // Draw border
+            cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+            cairo_set_line_width(cr, 1.0);
+            cairo_rectangle(cr, x, y, w, bar_height * 0.8);
+            cairo_stroke(cr);
+            
+            // Draw text
+            cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
             cairo_move_to(cr, x + 2, y + bar_height * 0.5);
             cairo_show_text(cr, processus_list[i].nom);
         }
     }
+
+    // Draw timeline
+    double timeline_y = chart_height + 10;
+    
+    // Draw timeline base line
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_set_line_width(cr, 2.0);
+    cairo_move_to(cr, 0, timeline_y);
+    cairo_line_to(cr, width, timeline_y);
+    cairo_stroke(cr);
+    
+    // Draw time markers
+    cairo_set_font_size(cr, 12);
+    int time_interval = 1;
+    
+    // Adjust interval based on max_time to avoid crowding
+    if (max_time > 50) time_interval = 5;
+    else if (max_time > 20) time_interval = 2;
+    
+    for (int t = 0; t <= max_time; t += time_interval) {
+        double x = t * time_scale;
+        
+        // Draw tick mark
+        cairo_move_to(cr, x, timeline_y - 5);
+        cairo_line_to(cr, x, timeline_y + 5);
+        cairo_stroke(cr);
+        
+        // Draw time label
+        char time_label[16];
+        sprintf(time_label, "%d", t);
+        cairo_text_extents_t extents;
+        cairo_text_extents(cr, time_label, &extents);
+        cairo_move_to(cr, x - extents.width / 2, timeline_y + 20);
+        cairo_show_text(cr, time_label);
+    }
+    
+    // Draw label "Time" at the end
+    cairo_set_font_size(cr, 11);
+    cairo_move_to(cr, width - 35, timeline_y + 35);
+    cairo_show_text(cr, "Time");
+    
     return FALSE;
 }
