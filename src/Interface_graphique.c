@@ -128,76 +128,68 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data) {
     return FALSE;
 }
 
-void cell_edited_callback(GtkCellRendererText *cell G_GNUC_UNUSED,
-                          const gchar *path_string,
-                          const gchar *new_text,
-                          gpointer data) {
-    GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
+void cell_edited_callback(GtkCellRendererText *renderer,
+                          gchar               *path_string,
+                          gchar               *new_text,
+                          gpointer             user_data)
+{
+    // SI L'UTILISATEUR ANNULE (ÉCHAP) OU CLIC SIMPLE → new_text EST VIDE → ON NE FAIT RIEN
+    if (!new_text || new_text[0] == '\0') {
+        return;  // C'EST LA LIGNE QUI SAUVE TOUT
+    }
+
     GtkTreeIter iter;
-    int row = gtk_tree_path_get_indices(path)[0];
-    int col = GPOINTER_TO_INT(data);
+    GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
+    if (!path) return;
 
     if (!gtk_tree_model_get_iter(GTK_TREE_MODEL(store), &iter, path)) {
         gtk_tree_path_free(path);
         return;
     }
 
-    switch (col) {
-        case COL_NOM: strncpy(processus_list[row].nom, new_text, 19); processus_list[row].nom[19] = '\0'; break;
-        case COL_ARRIVEE: processus_list[row].arrivee = atoi(new_text); break;
-        case COL_DUREE: processus_list[row].duree = atoi(new_text); break;
-        case COL_PRIORITE: processus_list[row].priorite = atoi(new_text); break;
+    gint *indices = gtk_tree_path_get_indices(path);
+    if (!indices) {
+        gtk_tree_path_free(path);
+        return;
     }
-    gtk_list_store_set(store, &iter, col,
-                       col == COL_NOM ? processus_list[row].nom :
-                       col == COL_ARRIVEE ? processus_list[row].arrivee :
-                       col == COL_DUREE ? processus_list[row].duree : processus_list[row].priorite, -1);
+    int row = indices[0];
     gtk_tree_path_free(path);
-}
 
-void populate_tree_view() {
-    gtk_list_store_clear(store);
-    for (int i = 0; i < num_processus; i++) {
-        GtkTreeIter iter;
-        gtk_list_store_append(store, &iter);
-        gtk_list_store_set(store, &iter,
-                           COL_NOM, processus_list[i].nom,
-                           COL_ARRIVEE, processus_list[i].arrivee,
-                           COL_DUREE, processus_list[i].duree,
-                           COL_PRIORITE, processus_list[i].priorite, -1);
-    }
-}
+    int col = GPOINTER_TO_INT(user_data);
+    int value;
 
-void load_file(const char* filename) {
-    FILE *file = fopen(filename, "r");
-    if (!file) return;
-    char line[256];
-    num_processus = 0;
-    while (fgets(line, sizeof(line), file) && num_processus < 100) {
-        if (line[0] == '#' || strspn(line, " \t\r\n") == strlen(line)) continue;
-        if (sscanf(line, "%s %d %d %d",
-                   processus_list[num_processus].nom,
-                   &processus_list[num_processus].arrivee,
-                   &processus_list[num_processus].duree,
-                   &processus_list[num_processus].priorite) == 4) {
-            num_processus++;
-        }
-    }
-    fclose(file);
-    populate_tree_view();
-}
+    switch (col) {
+        case COL_NOM:
+            strncpy(processus_list[row].nom, new_text, 19);
+            processus_list[row].nom[19] = '\0';
+            gtk_list_store_set(store, &iter, COL_NOM, processus_list[row].nom, -1);
+            break;
 
-void open_file_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data) {
-    GtkWidget *dialog = gtk_file_chooser_dialog_new("Ouvrir fichier processus",
-        GTK_WINDOW(user_data), GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_Annuler", GTK_RESPONSE_CANCEL,
-        "_Ouvrir", GTK_RESPONSE_ACCEPT, NULL);
-    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
-        char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
-        load_file(filename);
-        g_free(filename);
+        case COL_ARRIVEE:
+            value = atoi(new_text);
+            if (value >= 0) {
+                processus_list[row].arrivee = value;
+                gtk_list_store_set(store, &iter, COL_ARRIVEE, value, -1);
+            }
+            break;
+
+        case COL_DUREE:
+            value = atoi(new_text);
+            if (value > 0) {
+                processus_list[row].duree = value;
+                processus_list[row].restant = value;
+                gtk_list_store_set(store, &iter, COL_DUREE, value, -1);
+            }
+            break;
+
+        case COL_PRIORITE:
+            value = atoi(new_text);
+            if (value >= 0) {
+                processus_list[row].priorite = value;
+                gtk_list_store_set(store, &iter, COL_PRIORITE, value, -1);
+            }
+            break;
     }
-    gtk_widget_destroy(dialog);
 }
 
 void populate_algorithms() {
@@ -205,13 +197,15 @@ void populate_algorithms() {
     if (!dir) return;
     struct dirent *entry;
     while ((entry = readdir(dir))) {
-        if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.')
+        if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.') {
+            // EXCLURE aging.so
+            if (strcmp(entry->d_name, "aging.so") == 0) continue;
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(algorithm_combo), entry->d_name);
+        }
     }
     closedir(dir);
     gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), 0);
 }
-
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UNUSED) {
     global_quantum = gtk_spin_button_get_value_as_int(spin_button);
 }
@@ -241,11 +235,11 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     void (*ordonnancer)(Processus[], int) = dlsym(handle, "ordonnancer");
     void (*definir_quantum)(int) = dlsym(handle, "definir_quantum");
 
-    for (int i = 0; i < num_processus; i++) {
-        processus_list[i].restant = processus_list[i].duree;
-        processus_list[i].nb_segments = 0;
-        processus_list[i].temps_sortie = -1;
-    }
+   for (int i = 0; i < num_processus; i++) {
+    processus_list[i].restant = processus_list[i].duree;  // <-- Ajoute cette ligne
+    processus_list[i].nb_segments = 0;
+    processus_list[i].temps_sortie = -1;
+}
 
     if (definir_quantum) definir_quantum(global_quantum);
     if (ordonnancer) ordonnancer(processus_list, num_processus);
@@ -274,11 +268,6 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
     // STYLE GLOBAL DOUX ET MODERNE — 100% SANS VIOLET
-        // STYLE GLOBAL DOUX & CHALEUREUX — 100% SANS BLEU NI VIOLET
-      // STYLE GLOBAL ULTRA-CLAIR ET DOUX (gris + beige très clair)
-       // STYLE GLOBAL — FOND BEIGE TRÈS CLAIR / BLANC SALE (ultra-doux et chaleureux)
-       // STYLE GLOBAL — BLEU CLAIR TRÈS DOUX & MODERNE (2025 style)
-       // STYLE GLOBAL — COULEUR #B0C4DE (LightSteelBlue) PARTOUT
     GtkCssProvider *global_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(global_css,
         "window { "
@@ -348,7 +337,7 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     // TABLEAU MAGNIFIQUE — COULEURS DOUCES
     GtkWidget *treeview = gtk_tree_view_new();
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(treeview), TRUE);
-        GtkCssProvider *table_css = gtk_css_provider_new();
+    GtkCssProvider *table_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(table_css,
         "treeview { "
         "   font-size: 18px; "
@@ -394,7 +383,7 @@ void launch_gui(int argc, char *argv[], const char* filename) {
 
     store = gtk_list_store_new(NUM_COLS, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
     gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(store));
-    g_object_unref(store);
+    // g_object_unref(store);
 
     GtkWidget *tree_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(tree_scroll), treeview);

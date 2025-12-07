@@ -1,126 +1,103 @@
-// aging.so — VERSION CORRIGÉE ET PARFAITE (vrai aging + RR par priorité)
+// politiques/aging.c — AGING + QUANTUM + PRÉEMPTION + RR (plus grand = plus prioritaire)
 #include "../processus.h"
 #include <stdio.h>
-#include <stdlib.h>
 
-static int quantum = 2;
+static int quantum = 4;  // Quantum par défaut (modifiable via l'interface)
 
 void definir_quantum(int q) {
     if (q > 0) quantum = q;
 }
 
-#define PRIORITE_MAX 5
-#define PRIORITE_MIN 1
-
-void ordonnancer(Processus processus[], int nombre) {
-    printf("=== MLFQ avec Aging réel (quantum=%d) ===\n", quantum);
-
-    // Initialisation
-    for (int i = 0; i < nombre; i++) {
-        processus[i].restant = processus[i].duree;
-        processus[i].nb_segments = 0;
-        processus[i].temps_sortie = -1;
-        processus[i].temps_attente = 0;  // On va utiliser ça pour l'aging
-    }
-
+void ordonnancer(Processus procs[], int n) {
     int temps = 0;
     int termines = 0;
+    int i;
+
+    // Initialisation
+    for (i = 0; i < n; i++) {
+        procs[i].restant = procs[i].duree;
+        procs[i].nb_segments = 0;
+        procs[i].temps_sortie = -1;
+        procs[i].priorite_dynamique = procs[i].priorite;
+    }
+
     int courant = -1;
     int debut_quantum = 0;
+    int temps_dans_quantum = 0;
 
-    while (termines < nombre) {
-        // 1. AGING : tous les processus en attente augmentent leur priorité de 1 à chaque tour
-        for (int i = 0; i < nombre; i++) {
-            if (processus[i].restant > 0 && 
-                processus[i].arrivee <= temps && 
-                i != courant && 
-                processus[i].priorite < PRIORITE_MAX) {
-                
-                processus[i].priorite++;
-                // printf("[AGING t=%d] %s → prio %d\n", temps, processus[i].nom, processus[i].priorite);
+    while (termines < n) {
+        // 1. AGING : chaque tick, les processus en attente gagnent +1 priorité
+        for (i = 0; i < n; i++) {
+            if (procs[i].restant > 0 && procs[i].arrivee <= temps && i != courant) {
+                procs[i].priorite_dynamique++;
             }
         }
 
-        // 2. Trouver le processus avec la priorité la plus haute
+        // 2. Trouver le processus avec la PLUS HAUTE priorité
         int meilleur = -1;
         int meilleure_prio = -1;
+        int candidats[100];
+        int nb_candidats = 0;
 
-        for (int i = 0; i < nombre; i++) {
-            if (processus[i].restant > 0 && processus[i].arrivee <= temps) {
-                if (processus[i].priorite > meilleure_prio) {
-                    meilleure_prio = processus[i].priorite;
-                    meilleur = i;
+        for (i = 0; i < n; i++) {
+            if (procs[i].arrivee <= temps && procs[i].restant > 0) {
+                if (procs[i].priorite_dynamique > meilleure_prio) {
+                    meilleure_prio = procs[i].priorite_dynamique;
+                    nb_candidats = 1;
+                    candidats[0] = i;
+                } else if (procs[i].priorite_dynamique == meilleure_prio) {
+                    candidats[nb_candidats++] = i;
                 }
             }
         }
 
-        // Si aucun processus prêt → attente
-        if (meilleur == -1) {
-            temps++;
-            continue;
-        }
+        if (meilleur == -1) { temps++; continue; }
 
-        // 3. Préemption si nécessaire
-        if (courant != meilleur && courant != -1 && processus[courant].restant > 0) {
-            // Sauvegarde du segment précédent
-            Processus* p = &processus[courant];
-            if (p->nb_segments < MAX_SEGMENTS_GANTT) {
-                p->diagramme_gantt[p->nb_segments].debut = debut_quantum;
-                p->diagramme_gantt[p->nb_segments].fin = temps;
-                p->nb_segments++;
+        // 3. Round-Robin parmi les candidats
+        static int rr_index = 0;
+        int selectionne = candidats[rr_index % nb_candidats];
+        rr_index++;
+
+        // 4. Préemption si nécessaire
+        if (courant != -1 && courant != selectionne) {
+            int idx = procs[courant].nb_segments++;
+            if (idx < MAX_SEGMENTS_GANTT) {
+                procs[courant].diagramme_gantt[idx].debut = debut_quantum;
+                procs[courant].diagramme_gantt[idx].fin = temps;
             }
-            printf("[t=%d] Préemption : %s → %s (prio %d > %d)\n",
-                   temps, p->nom, processus[meilleur].nom,
-                   processus[meilleur].priorite, p->priorite);
         }
 
-        courant = meilleur;
-        if (processus[courant].nb_segments == 0 || 
-            processus[courant].diagramme_gantt[processus[courant].nb_segments-1].fin != temps) {
+        // 5. Changer de processus
+        if (courant != selectionne) {
+            courant = selectionne;
             debut_quantum = temps;
+            temps_dans_quantum = 0;
         }
 
-        // Exécution d'une unité
-        processus[courant].restant--;
+        // 6. Exécuter 1 unité
+        procs[courant].restant--;
+        temps_dans_quantum++;
         temps++;
 
-        // Mise à jour du segment courant
-        int seg = processus[courant].nb_segments;
-        if (seg == 0 || processus[courant].diagramme_gantt[seg-1].fin != temps-1) {
-            if (seg < MAX_SEGMENTS_GANTT) {
-                processus[courant].diagramme_gantt[seg].debut = temps-1;
-                processus[courant].diagramme_gantt[seg].fin = temps;
-                processus[courant].nb_segments++;
+        // 7. Fin du processus
+        if (procs[courant].restant == 0) {
+            int idx = procs[courant].nb_segments++;
+            if (idx < MAX_SEGMENTS_GANTT) {
+                procs[courant].diagramme_gantt[idx].debut = debut_quantum;
+                procs[courant].diagramme_gantt[idx].fin = temps;
             }
-        } else {
-            processus[courant].diagramme_gantt[seg-1].fin = temps;
-        }
-
-        // Fin du processus ?
-        if (processus[courant].restant == 0) {
-            processus[courant].temps_sortie = temps;
-            printf("[t=%d] %s terminé !\n", temps, processus[courant].nom);
+            procs[courant].temps_sortie = temps;
             termines++;
             courant = -1;
             continue;
         }
 
-        // Quantum épuisé ?
-        if ((temps - debut_quantum) >= quantum) {
-            Processus* p = &processus[courant];
-            if (p->nb_segments < MAX_SEGMENTS_GANTT) {
-                p->diagramme_gantt[p->nb_segments].debut = debut_quantum;
-                p->diagramme_gantt[p->nb_segments].fin = temps;
-                p->nb_segments++;
-            }
-
-            if (p->priorite > PRIORITE_MIN) {
-                p->priorite--;
-                printf("[t=%d] %s descend → prio %d (quantum épuisé)\n", temps, p->nom, p->priorite);
+        // 8. Quantum épuisé → baisse de priorité + libération
+        if (temps_dans_quantum >= quantum) {
+            if (procs[courant].priorite_dynamique > 1) {
+                procs[courant].priorite_dynamique--;
             }
             courant = -1;
         }
     }
-
-    printf("=== Ordonnancement terminé à t=%d ===\n", temps);
 }
