@@ -31,7 +31,7 @@ double couleurs[6][3] = {
 };
 
 static gboolean animer(gpointer data G_GNUC_UNUSED) {
-        temps_actuel += 2;
+    temps_actuel += 2;
     if (temps_actuel > temps_max + 20) {
         animation_en_cours = FALSE;
         return FALSE;
@@ -41,7 +41,7 @@ static gboolean animer(gpointer data G_GNUC_UNUSED) {
 }
 
 gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNUC_UNUSED) {
-        int width  = gtk_widget_get_allocated_width(widget);
+    int width  = gtk_widget_get_allocated_width(widget);
     int height = gtk_widget_get_allocated_height(widget);
 
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -145,7 +145,6 @@ void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
 
     int col = GPOINTER_TO_INT(user_data);
 
-    // → ON RESTAURE LA VALEUR ACTUELLE POUR FORCER LE REDRAW → PLUS JAMAIS DE DISPARITION
     if (!new_text || new_text[0] == '\0') {
         if (col == COL_NOM) {
             gchar *val;
@@ -160,7 +159,6 @@ void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
         return;
     }
 
-    // SINON : VRAIE MODIFICATION
     int value;
     switch (col) {
         case COL_NOM:
@@ -196,90 +194,85 @@ void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
     }
 }
 
+/* ============================================= */
+/* === VERSION FINALE : NOMS JOLIS + FONCTIONNEL === */
+/* ============================================= */
+
 void populate_algorithms() {
-    // D'abord on vide le combo au cas où on l'appelle plusieurs fois
     gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(algorithm_combo));
 
-    DIR *dir = opendir("build/politiques");
-    if (!dir) {
-        perror("Impossible d'ouvrir build/politiques");
-        return;
-    }
+    const char *algos[][2] = {
+        {"FIFO",                "fifo.so"},
+        {"Aging ",        "aging.so"},
+        {"Round-Robin",         "round_robin.so"},
+        {"Priorité préemptif",  "priorite.so"},
+        {"MLFQ ",      "mlfq.so"},
+        {NULL, NULL}
+    };
 
-    struct dirent *entry;
-    int fifo_trouve = 0;
-    int position_actuelle = 0;
-    int position_fifo = -1;
+    int fifo_index = 0;
+    int current_index = 0;
 
-    // Première passe : on ajoute tous les .so (y compris aging.so maintenant)
-    while ((entry = readdir(dir))) {
-        if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.') {
-
-            // On enlève l'exclusion d'aging.so → il apparaît normalement
-            // if (strcmp(entry->d_name, "aging.so") == 0) continue;  ← SUPPRIMÉ
-
-            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(algorithm_combo), entry->d_name);
-
-            // On repère à quelle position se trouve fifo.so
-            if (strcmp(entry->d_name, "fifo.so") == 0) {
-                position_fifo = position_actuelle;
-                fifo_trouve = 1;
+    for (int i = 0; algos[i][0]; i++) {
+        char path[256];
+        snprintf(path, sizeof(path), "build/politiques/%s", algos[i][1]);
+        if (access(path, F_OK) == 0) {  // fichier existe
+            gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(algorithm_combo), algos[i][1], algos[i][0]);
+            if (strcmp(algos[i][1], "fifo.so") == 0) {
+                fifo_index = current_index;
             }
-            position_actuelle++;
+            current_index++;
         }
     }
-    closedir(dir);
 
-    // On sélectionne FIFO par défaut (si il existe)
-    if (fifo_trouve && position_fifo != -1) {
-        gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), position_fifo);
-    } else {
-        // Sinon on sélectionne le premier de la liste (ou rien)
-        gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), 0);
-    }
+    gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), fifo_index);
 }
+
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UNUSED) {
     global_quantum = gtk_spin_button_get_value_as_int(spin_button);
 }
 
 void on_algorithm_changed(GtkComboBox *widget, gpointer user_data G_GNUC_UNUSED) {
-    gchar *active_algo = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(widget));
-    if (!active_algo) return;
+    gchar *vrai_nom = gtk_combo_box_get_active_id(GTK_COMBO_BOX(algorithm_combo));
+    if (!vrai_nom) return;
+
     char lib_path[256];
-    snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_algo);
-    g_free(active_algo);
+    snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", vrai_nom);
     void *handle = dlopen(lib_path, RTLD_LAZY);
     gtk_widget_set_visible(quantum_spin_button, handle && dlsym(handle, "definir_quantum"));
     if (handle) dlclose(handle);
 }
 
 void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
-    gchar *active_lib = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(algorithm_combo));
-    if (!active_lib) return;
+    gchar *vrai_nom = gtk_combo_box_get_active_id(GTK_COMBO_BOX(algorithm_combo));
+    if (!vrai_nom) return;
 
     char lib_path[256];
-    snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", active_lib);
-    g_free(active_lib);
+    snprintf(lib_path, sizeof(lib_path), "build/politiques/%s", vrai_nom);
 
     void *handle = dlopen(lib_path, RTLD_LAZY);
-    if (!handle) return;
+    if (!handle) {
+        g_printerr("Erreur chargement %s\n", vrai_nom);
+        return;
+    }
 
     void (*ordonnancer)(Processus[], int) = dlsym(handle, "ordonnancer");
     void (*definir_quantum)(int) = dlsym(handle, "definir_quantum");
 
-   for (int i = 0; i < num_processus; i++) {
-    processus_list[i].restant = processus_list[i].duree;  // <-- Ajoute cette ligne
-    processus_list[i].nb_segments = 0;
-    processus_list[i].temps_sortie = -1;
-}
+    for (int i = 0; i < num_processus; i++) {
+        processus_list[i].restant = processus_list[i].duree;
+        processus_list[i].nb_segments = 0;
+        processus_list[i].temps_sortie = -1;
+    }
 
     if (definir_quantum) definir_quantum(global_quantum);
     if (ordonnancer) ordonnancer(processus_list, num_processus);
 
     temps_max = 0;
-    for (int i = 0; i < num_processus; i++)
+    for (int i = 0; i < num_processus; i++) {
         if (processus_list[i].temps_sortie > temps_max)
             temps_max = processus_list[i].temps_sortie;
+    }
 
     algo_lance = TRUE;
     animation_en_cours = TRUE;
@@ -289,7 +282,6 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
 
     dlclose(handle);
 }
-
 
 void load_file(const char *filename) {
     FILE *f = fopen(filename, "r");
@@ -353,41 +345,18 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
-    // STYLE GLOBAL DOUX ET MODERNE — 100% SANS VIOLET
     GtkCssProvider *global_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(global_css,
-        "window { "
-        "   font-family: 'Segoe UI', sans-serif; "
-        "   background: #f0f4f8; "                     /* Fond très clair pour contraste */
-        "}"
-        "button { "
-        "   padding: 18px 38px; "
-        "   font-size: 17px; "
-        "   font-weight: bold; "
-        "   border-radius: 24px; "
-        "   margin: 12px; "
-        "   background: #B0C4DE; "                     /* Ta couleur exacte */
-        "   color: #2d3748; "
-        "   border: none; "
-        "   box-shadow: 0 6px 20px rgba(176,196,222,0.3); "
-        "}"
-        "button:hover { "
-        "   background: #9fb5d6; "                     /* Un peu plus foncé au hover */
-        "   transform: translateY(-4px); "
-        "   box-shadow: 0 15px 35px rgba(176,196,222,0.5); "
-        "}"
-        "combobox, spinbutton { "
-        "   font-size: 16px; "
-        "   padding: 14px; "
-        "   border-radius: 20px; "
-        "   background: white; "
-        "   border: 3px solid #B0C4DE; "               /* Bordure en #B0C4DE */
-        "}"
+        "window { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; }"
+        "button { padding: 18px 38px; font-size: 17px; font-weight: bold; border-radius: 24px; margin: 12px; background: #B0C4DE; color: #2d3748; border: none; box-shadow: 0 6px 20px rgba(176,196,222,0.3); }"
+        "button:hover { background: #9fb5d6; transform: translateY(-4px); box-shadow: 0 15px 35px rgba(176,196,222,0.5); }"
+        "combobox, spinbutton { font-size: 16px; padding: 14px; border-radius: 20px; background: white; border: 3px solid #B0C4DE; }"
         "combobox button { background: #B0C4DE; color: #2d3748; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
                                               GTK_STYLE_PROVIDER(global_css),
                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(window), main_box);
 
@@ -420,27 +389,14 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     g_signal_connect(gantt_drawing_area, "draw", G_CALLBACK(draw_gantt_callback), NULL);
     gtk_box_pack_start(GTK_BOX(main_box), gantt_drawing_area, TRUE, TRUE, 0);
 
-    // TABLEAU MAGNIFIQUE — COULEURS DOUCES
     GtkWidget *treeview = gtk_tree_view_new();
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(treeview), TRUE);
     gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(treeview), FALSE);
+
     GtkCssProvider *table_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(table_css,
-        "treeview { "
-        "   font-size: 18px; "
-        "   background: white; "
-        "   border-radius: 20px; "
-        "   margin: 25px; "
-        "   box-shadow: 0 8px 32px rgba(0,0,0,0.08); "
-        "}"
-        "treeview header button { "
-        "   background: #f8f9fa; "          /* Gris très clair */
-        "   color: #495057; "
-        "   font-weight: bold; "
-        "   padding: 18px; "
-        "   font-size: 18px; "
-        "   border-bottom: 2px solid #dee2e6; "
-        "}"
+        "treeview { font-size: 18px; background: white; border-radius: 20px; margin: 25px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); }"
+        "treeview header button { background: #f8f9fa; color: #495057; font-weight: bold; padding: 18px; font-size: 18px; border-bottom: 2px solid #dee2e6; }"
         "treeview row:nth-child(even) { background: #f8f9fa; }"
         "treeview row:nth-child(odd)  { background: white; }"
         "treeview row:hover { background: #e9ecef; }"
@@ -449,20 +405,15 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     gtk_style_context_add_provider(gtk_widget_get_style_context(treeview),
                                    GTK_STYLE_PROVIDER(table_css),
                                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
     const char *titles[] = {"Nom", "Arrivée", "Durée", "Priorité"};
-    const char *colors[] = {"#0ea5e9", "#38bdf8", "#f472b6", "#84cc16"}; // Bleu, Cyan, Rose, Vert
+    const char *colors[] = {"#0ea5e9", "#38bdf8", "#f472b6", "#84cc16"};
 
     for (int i = 0; i < NUM_COLS; i++) {
         GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-        g_object_set(renderer,
-             "editable", TRUE,
-             "weight", PANGO_WEIGHT_BOLD,
-             "foreground", colors[i],
-             "xalign", 0.5,
-             NULL);
+        g_object_set(renderer, "editable", TRUE, "weight", PANGO_WEIGHT_BOLD, "foreground", colors[i], "xalign", 0.5, NULL);
         g_signal_connect(renderer, "edited", G_CALLBACK(cell_edited_callback), GINT_TO_POINTER(i));
-        GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(
-            titles[i], renderer, "text", i, NULL);
+        GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(titles[i], renderer, "text", i, NULL);
         gtk_tree_view_column_set_alignment(col, 0.5);
         gtk_tree_view_column_set_expand(col, TRUE);
         gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), col);
@@ -470,7 +421,7 @@ void launch_gui(int argc, char *argv[], const char* filename) {
 
     store = gtk_list_store_new(NUM_COLS, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
     gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(store));
-    g_object_unref(store);  // ← UNCOMMENT CETTE LIGNE
+    g_object_unref(store);
 
     GtkWidget *tree_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(tree_scroll), treeview);
