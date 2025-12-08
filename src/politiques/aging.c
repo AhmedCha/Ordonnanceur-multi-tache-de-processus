@@ -1,103 +1,160 @@
-// politiques/aging.c — AGING + QUANTUM + PRÉEMPTION + RR (plus grand = plus prioritaire)
+// politiques/aging.c ─ VERSION FINALE (exactement ce que tu veux)
+
 #include "../processus.h"
 #include <stdio.h>
 
-static int quantum = 4;  // Quantum par défaut (modifiable via l'interface)
+#define QUANTUM 2
+#define SEUIL_AGING 8
+#define PRIORITE_MAX 5
+// PRIORITE_MIN supprimé → priorité peut être négative !
 
-void definir_quantum(int q) {
-    if (q > 0) quantum = q;
+typedef struct {
+    int dernier_reveil;
+} AgingData;
+
+static AgingData aging_data[100];
+
+// Un curseur Round-Robin par niveau de priorité (même pour les négatifs)
+// On utilise un tableau décalé pour gérer les priorités négatives
+#define PRIORITE_OFFSET 50
+static int rr_cursor[PRIORITE_MAX + PRIORITE_OFFSET + 10] = {0};
+
+void initialiser_aging(Processus processus[], int nombre) {
+    for (int i = 0; i < nombre; i++) {
+        aging_data[i].dernier_reveil = processus[i].arrivee;
+    }
+    // Réinitialiser tous les curseurs RR
+    for (int i = 0; i < PRIORITE_MAX + PRIORITE_OFFSET + 10; i++) {
+        rr_cursor[i] = 0;
+    }
 }
 
-void ordonnancer(Processus procs[], int n) {
-    int temps = 0;
-    int termines = 0;
-    int i;
-
-    // Initialisation
-    for (i = 0; i < n; i++) {
-        procs[i].restant = procs[i].duree;
-        procs[i].nb_segments = 0;
-        procs[i].temps_sortie = -1;
-        procs[i].priorite_dynamique = procs[i].priorite;
-    }
-
-    int courant = -1;
-    int debut_quantum = 0;
-    int temps_dans_quantum = 0;
-
-    while (termines < n) {
-        // 1. AGING : chaque tick, les processus en attente gagnent +1 priorité
-        for (i = 0; i < n; i++) {
-            if (procs[i].restant > 0 && procs[i].arrivee <= temps && i != courant) {
-                procs[i].priorite_dynamique++;
+void appliquer_aging(Processus processus[], int nombre, int temps) {
+    for (int i = 0; i < nombre; i++) {
+        if (processus[i].restant > 0 && processus[i].arrivee <= temps) {
+            int attente = temps - aging_data[i].dernier_reveil;
+            if (attente >= SEUIL_AGING && processus[i].priorite < PRIORITE_MAX) {
+                int ancienne = processus[i].priorite;
+                processus[i].priorite++;
+                printf("[AGING t=%d] %s boosté %d → %d\n", temps, processus[i].nom, ancienne, processus[i].priorite);
+                aging_data[i].dernier_reveil = temps;
+                // Réinitialiser RR du nouveau niveau
+                rr_cursor[processus[i].priorite + PRIORITE_OFFSET] = 0;
             }
         }
+    }
+}
 
-        // 2. Trouver le processus avec la PLUS HAUTE priorité
-        int meilleur = -1;
-        int meilleure_prio = -1;
-        int candidats[100];
-        int nb_candidats = 0;
+int get_rr_index(int prio) {
+    return prio + PRIORITE_OFFSET;
+}
 
-        for (i = 0; i < n; i++) {
-            if (procs[i].arrivee <= temps && procs[i].restant > 0) {
-                if (procs[i].priorite_dynamique > meilleure_prio) {
-                    meilleure_prio = procs[i].priorite_dynamique;
-                    nb_candidats = 1;
-                    candidats[0] = i;
-                } else if (procs[i].priorite_dynamique == meilleure_prio) {
-                    candidats[nb_candidats++] = i;
+void ordonnancer(Processus processus[], int nombre) {
+    printf("===== MLFQ Agressif + Aging (prio peut être négative !) =====\n\n");
+
+    for (int i = 0; i < nombre; i++) {
+        processus[i].restant = processus[i].duree;
+        processus[i].nb_segments = 0;
+        processus[i].temps_sortie = -1;
+    }
+    initialiser_aging(processus, nombre);
+
+    int temps = 0;
+    int termines = 0;
+    int courant = -1;
+    int quantum_use = 0;
+
+    while (termines < nombre) {
+        appliquer_aging(processus, nombre, temps);
+
+        // 1. Trouver la priorité maximale active
+        int prio_max = -9999;
+        for (int i = 0; i < nombre; i++) {
+            if (processus[i].restant > 0 && processus[i].arrivee <= temps) {
+                if (processus[i].priorite > prio_max) {
+                    prio_max = processus[i].priorite;
                 }
             }
         }
+        if (prio_max == -9999) { temps++; continue; }
 
-        if (meilleur == -1) { temps++; continue; }
+        // 2. Collecter tous les candidats à cette priorité
+        int candidats[100];
+        int n = 0;
+        for (int i = 0; i < nombre; i++) {
+            if (processus[i].restant > 0 && processus[i].arrivee <= temps &&
+                processus[i].priorite == prio_max) {
+                candidats[n++] = i;
+            }
+        }
 
         // 3. Round-Robin parmi les candidats
-        static int rr_index = 0;
-        int selectionne = candidats[rr_index % nb_candidats];
-        rr_index++;
+        int index = get_rr_index(prio_max);
+        int choisi = candidats[rr_cursor[index] % n];
+        rr_cursor[index] = (rr_cursor[index] + 1) % n;
 
         // 4. Préemption si nécessaire
-        if (courant != -1 && courant != selectionne) {
-            int idx = procs[courant].nb_segments++;
-            if (idx < MAX_SEGMENTS_GANTT) {
-                procs[courant].diagramme_gantt[idx].debut = debut_quantum;
-                procs[courant].diagramme_gantt[idx].fin = temps;
+        if (courant != choisi) {
+            if (courant != -1) {
+                Processus* p = &processus[courant];
+                if (p->nb_segments > 0) {
+                    p->diagramme_gantt[p->nb_segments - 1].fin = temps;
+                }
+                aging_data[courant].dernier_reveil = temps;
+
+                if (processus[choisi].priorite > processus[courant].priorite) {
+                    printf("[t=%d] PRÉEMPTION : %s → %s (prio %d > %d)\n",
+                           temps, p->nom, processus[choisi].nom,
+                           processus[choisi].priorite, processus[courant].priorite);
+                } else {
+                    printf("[t=%d] CHANGEMENT RR : %s → %s\n", temps, p->nom, processus[choisi].nom);
+                }
             }
+
+            courant = choisi;
+            quantum_use = 0;
+
+            Processus* p = &processus[courant];
+            if (p->nb_segments < MAX_SEGMENTS_GANTT) {
+                p->diagramme_gantt[p->nb_segments].debut = temps;
+                p->diagramme_gantt[p->nb_segments].fin = temps + 1;
+                p->nb_segments++;
+            }
+            printf("[t=%d] → %s (prio=%d, restant=%d)\n", temps, p->nom, p->priorite, p->restant);
         }
 
-        // 5. Changer de processus
-        if (courant != selectionne) {
-            courant = selectionne;
-            debut_quantum = temps;
-            temps_dans_quantum = 0;
-        }
-
-        // 6. Exécuter 1 unité
-        procs[courant].restant--;
-        temps_dans_quantum++;
+        // 5. Exécution d'une unité
+        processus[courant].restant--;
+        quantum_use++;
         temps++;
 
-        // 7. Fin du processus
-        if (procs[courant].restant == 0) {
-            int idx = procs[courant].nb_segments++;
-            if (idx < MAX_SEGMENTS_GANTT) {
-                procs[courant].diagramme_gantt[idx].debut = debut_quantum;
-                procs[courant].diagramme_gantt[idx].fin = temps;
-            }
-            procs[courant].temps_sortie = temps;
+        // Mise à jour Gantt
+        processus[courant].diagramme_gantt[processus[courant].nb_segments - 1].fin = temps;
+
+        // 6. DÉGRADATION SANS LIMITE
+        int ancienne_prio = processus[courant].priorite;
+        processus[courant].priorite--;
+        printf("[t=%d] DÉGRADATION : %s prio %d → %d\n", temps-1, processus[courant].nom, ancienne_prio, processus[courant].priorite);
+
+        // Réinitialiser le RR du NOUVEAU niveau de priorité
+        rr_cursor[get_rr_index(processus[courant].priorite)] = 0;
+
+        // 7. Fin du processus ?
+        if (processus[courant].restant == 0) {
+            processus[courant].temps_sortie = temps;
+            printf("[t=%d] TERMINÉ : %s\n", temps, processus[courant].nom);
             termines++;
             courant = -1;
             continue;
         }
 
-        // 8. Quantum épuisé → baisse de priorité + libération
-        if (temps_dans_quantum >= quantum) {
-            if (procs[courant].priorite_dynamique > 1) {
-                procs[courant].priorite_dynamique--;
-            }
+        // 8. Quantum épuisé ?
+        if (quantum_use >= QUANTUM) {
+            printf("[t=%d] QUANTUM ÉPUISÉ → %s libéré\n", temps, processus[courant].nom);
+            aging_data[courant].dernier_reveil = temps;
             courant = -1;
         }
     }
+
+    printf("\n===== Ordonnancement terminé à t=%d =====\n", temps);
 }

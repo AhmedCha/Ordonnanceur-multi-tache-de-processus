@@ -1,4 +1,3 @@
-// Interface_graphique.c — VERSION FINALE : DOUCE, MODERNE, SANS VIOLET
 #include <gtk/gtk.h>
 #include <cairo.h>
 #include <stdio.h>
@@ -22,14 +21,13 @@ int global_quantum = 4;
 int temps_actuel = 0, temps_max = 0;
 gboolean animation_en_cours = FALSE, algo_lance = FALSE;
 
-// Palette douce et professionnelle (bleu ciel, vert d'eau, corail, beige)
 double couleurs[6][3] = {
-    {0.42, 0.70, 0.98},  // Bleu ciel
-    {0.52, 0.85, 0.70},  // Vert menthe
-    {0.98, 0.70, 0.70},  // Corail doux
-    {1.00, 0.80, 0.60},  // Orange crème
-    {0.80, 0.70, 0.98},  // Lavande très claire
-    {0.65, 0.85, 0.95}   // Cyan doux
+    {0.42, 0.70, 0.98},  
+    {0.52, 0.85, 0.70},  
+    {0.98, 0.70, 0.70},  
+    {1.00, 0.80, 0.60},  
+    {0.80, 0.70, 0.98},  
+    {0.65, 0.85, 0.95}   
 };
 
 static gboolean animer(gpointer data G_GNUC_UNUSED) {
@@ -129,15 +127,10 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNU
 }
 
 void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
-                              gchar               *path_string,
+                          gchar               *path_string,
                           gchar               *new_text,
                           gpointer             user_data)
 {
-    // SI L'UTILISATEUR ANNULE (ÉCHAP) OU CLIC SIMPLE → new_text EST VIDE → ON NE FAIT RIEN
-    if (!new_text || new_text[0] == '\0') {
-        return;  // C'EST LA LIGNE QUI SAUVE TOUT
-    }
-
     GtkTreeIter iter;
     GtkTreePath *path = gtk_tree_path_new_from_string(path_string);
     if (!path) return;
@@ -147,17 +140,28 @@ void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
         return;
     }
 
-    gint *indices = gtk_tree_path_get_indices(path);
-    if (!indices) {
-        gtk_tree_path_free(path);
-        return;
-    }
-    int row = indices[0];
+    int row = gtk_tree_path_get_indices(path)[0];
     gtk_tree_path_free(path);
 
     int col = GPOINTER_TO_INT(user_data);
-    int value;
 
+    // → ON RESTAURE LA VALEUR ACTUELLE POUR FORCER LE REDRAW → PLUS JAMAIS DE DISPARITION
+    if (!new_text || new_text[0] == '\0') {
+        if (col == COL_NOM) {
+            gchar *val;
+            gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, COL_NOM, &val, -1);
+            gtk_list_store_set(store, &iter, COL_NOM, val, -1);
+            g_free(val);
+        } else {
+            gint val;
+            gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, col, &val, -1);
+            gtk_list_store_set(store, &iter, col, val, -1);
+        }
+        return;
+    }
+
+    // SINON : VRAIE MODIFICATION
+    int value;
     switch (col) {
         case COL_NOM:
             strncpy(processus_list[row].nom, new_text, 19);
@@ -193,18 +197,46 @@ void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
 }
 
 void populate_algorithms() {
+    // D'abord on vide le combo au cas où on l'appelle plusieurs fois
+    gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(algorithm_combo));
+
     DIR *dir = opendir("build/politiques");
-    if (!dir) return;
+    if (!dir) {
+        perror("Impossible d'ouvrir build/politiques");
+        return;
+    }
+
     struct dirent *entry;
+    int fifo_trouve = 0;
+    int position_actuelle = 0;
+    int position_fifo = -1;
+
+    // Première passe : on ajoute tous les .so (y compris aging.so maintenant)
     while ((entry = readdir(dir))) {
         if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.') {
-            // EXCLURE aging.so
-            if (strcmp(entry->d_name, "aging.so") == 0) continue;
+
+            // On enlève l'exclusion d'aging.so → il apparaît normalement
+            // if (strcmp(entry->d_name, "aging.so") == 0) continue;  ← SUPPRIMÉ
+
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(algorithm_combo), entry->d_name);
+
+            // On repère à quelle position se trouve fifo.so
+            if (strcmp(entry->d_name, "fifo.so") == 0) {
+                position_fifo = position_actuelle;
+                fifo_trouve = 1;
+            }
+            position_actuelle++;
         }
     }
     closedir(dir);
-    gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), 0);
+
+    // On sélectionne FIFO par défaut (si il existe)
+    if (fifo_trouve && position_fifo != -1) {
+        gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), position_fifo);
+    } else {
+        // Sinon on sélectionne le premier de la liste (ou rien)
+        gtk_combo_box_set_active(GTK_COMBO_BOX(algorithm_combo), 0);
+    }
 }
 void on_quantum_changed(GtkSpinButton *spin_button, gpointer user_data G_GNUC_UNUSED) {
     global_quantum = gtk_spin_button_get_value_as_int(spin_button);
@@ -257,9 +289,7 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
 
     dlclose(handle);
 }
-// ====================================
-// FONCTIONS MANQUANTES – À AJOUTER !
-// ====================================
+
 
 void load_file(const char *filename) {
     FILE *f = fopen(filename, "r");
@@ -393,6 +423,7 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     // TABLEAU MAGNIFIQUE — COULEURS DOUCES
     GtkWidget *treeview = gtk_tree_view_new();
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(treeview), TRUE);
+    gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(treeview), FALSE);
     GtkCssProvider *table_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(table_css,
         "treeview { "
@@ -424,11 +455,11 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     for (int i = 0; i < NUM_COLS; i++) {
         GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
         g_object_set(renderer,
-                     "editable", TRUE,
-                     "weight", PANGO_WEIGHT_BOLD,
-                     "foreground", colors[i],
-                     "xalign", 0.5,
-                     NULL);
+             "editable", TRUE,
+             "weight", PANGO_WEIGHT_BOLD,
+             "foreground", colors[i],
+             "xalign", 0.5,
+             NULL);
         g_signal_connect(renderer, "edited", G_CALLBACK(cell_edited_callback), GINT_TO_POINTER(i));
         GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(
             titles[i], renderer, "text", i, NULL);
@@ -439,7 +470,7 @@ void launch_gui(int argc, char *argv[], const char* filename) {
 
     store = gtk_list_store_new(NUM_COLS, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
     gtk_tree_view_set_model(GTK_TREE_VIEW(treeview), GTK_TREE_MODEL(store));
-    // g_object_unref(store);
+    g_object_unref(store);  // ← UNCOMMENT CETTE LIGNE
 
     GtkWidget *tree_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(tree_scroll), treeview);
