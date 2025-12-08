@@ -32,8 +32,8 @@ double couleurs[6][3] = {
     {0.65, 0.85, 0.95}   // Cyan doux
 };
 
-static gboolean animer(gpointer data) {
-    temps_actuel += 2;
+static gboolean animer(gpointer data G_GNUC_UNUSED) {
+        temps_actuel += 2;
     if (temps_actuel > temps_max + 20) {
         animation_en_cours = FALSE;
         return FALSE;
@@ -42,8 +42,8 @@ static gboolean animer(gpointer data) {
     return TRUE;
 }
 
-gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data) {
-    int width  = gtk_widget_get_allocated_width(widget);
+gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data G_GNUC_UNUSED) {
+        int width  = gtk_widget_get_allocated_width(widget);
     int height = gtk_widget_get_allocated_height(widget);
 
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -128,8 +128,8 @@ gboolean draw_gantt_callback(GtkWidget *widget, cairo_t *cr, gpointer data) {
     return FALSE;
 }
 
-void cell_edited_callback(GtkCellRendererText *renderer,
-                          gchar               *path_string,
+void cell_edited_callback(GtkCellRendererText *renderer G_GNUC_UNUSED,
+                              gchar               *path_string,
                           gchar               *new_text,
                           gpointer             user_data)
 {
@@ -256,6 +256,62 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     gtk_widget_queue_draw(gantt_drawing_area);
 
     dlclose(handle);
+}
+// ====================================
+// FONCTIONS MANQUANTES – À AJOUTER !
+// ====================================
+
+void load_file(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        g_printerr("Impossible d'ouvrir %s\n", filename);
+        return;
+    }
+
+    gtk_list_store_clear(store);
+    num_processus = 0;
+
+    char ligne[256];
+    while (fgets(ligne, sizeof(ligne), f)) {
+        if (ligne[0] == '#' || ligne[0] == '\n') continue;
+
+        Processus *p = &processus_list[num_processus];
+        if (sscanf(ligne, "%s %d %d %d", p->nom, &p->arrivee, &p->duree, &p->priorite) == 4) {
+            p->restant = p->duree;
+            p->nb_segments = 0;
+            p->temps_sortie = -1;
+            p->priorite_dynamique = p->priorite;
+
+            GtkTreeIter iter;
+            gtk_list_store_append(store, &iter);
+            gtk_list_store_set(store, &iter,
+                               COL_NOM, p->nom,
+                               COL_ARRIVEE, p->arrivee,
+                               COL_DUREE, p->duree,
+                               COL_PRIORITE, p->priorite,
+                               -1);
+            num_processus++;
+        }
+    }
+    fclose(f);
+    algo_lance = FALSE;
+    gtk_widget_queue_draw(gantt_drawing_area);
+}
+
+void open_file_callback(GtkWidget *widget, gpointer data) {
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Ouvrir fichier processus",
+                                                    GTK_WINDOW(data),
+                                                    GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                    "Annuler", GTK_RESPONSE_CANCEL,
+                                                    "Ouvrir", GTK_RESPONSE_ACCEPT,
+                                                    NULL);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        load_file(filename);
+        g_free(filename);
+    }
+    gtk_widget_destroy(dialog);
 }
 
 void launch_gui(int argc, char *argv[], const char* filename) {

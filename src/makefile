@@ -20,17 +20,17 @@ main: $(MAIN_OBJS)
 
 # Compilation des .o
 main.o: main.c processus.h
-	gcc -Wall -Wextra -fPIC -c $< $(GTK_CFLAGS)
+	gcc -Wall -Wextra -c $< $(GTK_CFLAGS)
 
 affichage.o: affichage.c processus.h
-	gcc -Wall -Wextra -fPIC -c $<
+	gcc -Wall -Wextra -c $<
 
 Interface_graphique.o: Interface_graphique.c processus.h
-	gcc -Wall -Wextra -fPIC -c $< $(GTK_CFLAGS)
+	gcc -Wall -Wextra -c $< $(GTK_CFLAGS)
 
-# Compilation des plugins .so → ON NE LIEN PLUS LES MAIN_OBJS (c'était une erreur !)
+# Compilation des plugins .so — AJOUT DE -I.. POUR INCLURE processus.h DU PARENT
 build/politiques/%.so: politiques/%.c processus.h | build/politiques
-	gcc -Wall -Wextra -fPIC -shared -o $@ $<
+	gcc -Wall -Wextra -fPIC -shared -o $@ $< -I..
 
 # Nettoyage propre
 clean:
