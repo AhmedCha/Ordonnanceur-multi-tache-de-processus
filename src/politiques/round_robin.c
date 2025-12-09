@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "../processus.h"
 
-static int quantum_rr = 4; 
+static int quantum_rr = 4;
 
 void definir_quantum(int q) {
     if (q > 0) {

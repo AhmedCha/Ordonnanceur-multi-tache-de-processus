@@ -3,7 +3,7 @@
 
 void ordonnancer(Processus tableau_processus[], int nombre_processus) {
     printf("===== Ordonnancement FIFO =====\n");
-    
+
     for (int i = 0; i < nombre_processus - 1; i++) {
         int min_index = i;
         for (int j = i + 1; j < nombre_processus; j++) {

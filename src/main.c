@@ -1,4 +1,3 @@
-// main.c — VERSION FINALE PARFAITE (GUI + TUI)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,10 +73,10 @@ int menu_interactif(char *options[], int nombre_options) {
 }
 
 int main(int argc, char *argv[]) {
-    int run_gui = 0;  // Par défaut TUI
+    int run_gui = 0;
     const char* filename = NULL;
 
-    // Analyse des arguments
+    
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--gui") == 0) {
             run_gui = 1;
@@ -86,25 +85,21 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Si pas de fichier → GUI par défaut
     if (filename == NULL) {
         run_gui = 1;
     }
 
     if (run_gui) {
-        // Lancement du GUI magnifique
         launch_gui(argc, argv, filename);
         return 0;
     }
 
-    // Mode TUI
     if (filename == NULL) {
         printf("Usage (TUI): %s <fichier> [--tui]\n", argv[0]);
         printf("Usage (GUI): %s [--gui] [fichier]\n", argv[0]);
         return 1;
     }
 
-    // Chargement des politiques
     DIR *dir = opendir("build/politiques");
     if (!dir) {
         perror("Erreur ouverture build/politiques");
@@ -148,7 +143,6 @@ int main(int argc, char *argv[]) {
         void (*ordonnancer)(Processus[], int) = dlsym(lib, "ordonnancer");
         void (*set_quantum)(int) = dlsym(lib, "definir_quantum");
 
-        // Réinitialisation
         for (int i = 0; i < n; i++) {
             procs[i].restant = procs[i].duree;
             procs[i].nb_segments = 0;

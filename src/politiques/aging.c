@@ -12,7 +12,6 @@ typedef struct {
 
 static AgingData aging_data[100];
 
-
 #define PRIORITE_OFFSET 50
 static int rr_cursor[PRIORITE_MAX + PRIORITE_OFFSET + 10] = {0};
 
