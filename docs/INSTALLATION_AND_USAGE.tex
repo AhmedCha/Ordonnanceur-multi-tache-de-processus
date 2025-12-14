@@ -1,0 +1,121 @@
+% Installation and Usage - LaTeX version
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{bera} % monospace font
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\title{Installation and Usage}
+\author{Ordonnanceur-multi-tache-de-processus}
+\date{\today}
+\pagestyle{fancy}
+\fancyhf{}
+% ensure enough header space for fancyhdr
+\setlength{\headheight}{14pt}
+\lhead{Ordonnanceur-multi-tache-de-processus}
+\rhead{Installation and Usage}
+\cfoot{\thepage}
+\begin{document}
+\maketitle
+\tableofcontents
+\vspace{1em}
+
+\section{Overview}
+This document explains how to install, build, and run the Multi-Process Scheduler Simulator.
+
+The simulator visualizes process scheduling algorithms (TUI and GUI modes). Scheduling algorithms are implemented as separate modules and dynamically loaded at runtime.
+
+\subsection*{Repository layout (key files)}
+\begin{itemize}[left=0pt]
+  \item \texttt{src/main.c} --- application entry point, CLI and menu handling
+  \item \texttt{src/processus.h} --- \texttt{Processus} struct and shared definitions
+  \item \texttt{src/affichage.c} --- Gantt chart and display logic
+  \item \texttt{src/politiques/} --- scheduling algorithm implementations
+  \item \texttt{src/processus.txt} --- example process input file
+  \item \texttt{build/} --- compiled artifacts created by \texttt{make}
+\end{itemize}
+
+\section{Prerequisites}
+Recommended platform: Linux / WSL (Windows Subsystem for Linux).
+
+Tools required:
+\begin{itemize}
+  \item \texttt{gcc} (C compiler)
+  \item \texttt{make}
+\end{itemize}
+
+\section{Build (compile) the project}
+\begin{enumerate}
+  \item Open a terminal in the \texttt{src/} directory:
+  \begin{verbatim}
+cd path/to/Ordonnanceur-multi-tache-de-processus/src
+  \end{verbatim}
+  \item Run \texttt{make}:
+  \begin{verbatim}
+make
+  \end{verbatim}
+This compiles the main program and the scheduling modules. The compiled shared libraries are placed into \texttt{build/politiques/} and the executable \texttt{main} is produced.
+\end{enumerate}
+
+\section{Process input file format}
+Each process is one line with the following fields separated by spaces:
+\begin{verbatim}
+process-name arrival-time execution-time initial-priority
+\end{verbatim}
+
+Example (\texttt{processus.txt}):
+\begin{verbatim}
+P1 0 5 1
+P2 1 3 2
+P3 2 4 1
+\end{verbatim}
+
+\section{Run the simulator}
+There are two main modes:
+
+\subsection{TUI (Terminal UI) mode}
+Show a terminal-based menu and results in the terminal. Provide the process file as argument:
+\begin{verbatim}
+./main --tui processus.txt
+\end{verbatim}
+
+\subsection{GUI mode}
+Open the graphical interface:
+\begin{verbatim}
+./main --gui processus.txt
+\end{verbatim}
+
+\section{Add a new scheduling algorithm}
+\begin{enumerate}
+\item Create a \texttt{.c} file in \texttt{src/politiques/}, e.g. \texttt{my\_algorithm.c}.
+\item Include the shared header and implement \texttt{ordonnancer}:
+\begin{verbatim}
+#include "../processus.h"
+
+void ordonnancer(Processus T[], int n) {
+    // scheduling logic here
+}
+\end{verbatim}
+\item Run \texttt{make} again; the makefile auto-detects new files and compiles them to \texttt{build/politiques/}.
+\end{enumerate}
+
+\section{Troubleshooting}
+\begin{itemize}
+  \item \texttt{make: command not found} --- install build tools with your package manager.
+  \item \texttt{Permission denied} when running \texttt{./main} --- run \texttt{chmod +x main} or run via WSL/appropriate shell.
+  \item \texttt{process file not found} --- ensure path is correct; use absolute path if needed.
+  \item Compilation errors in \texttt{politiques/} --- confirm each module implements \texttt{void ordonnancer(Processus T[], int n)} and includes \texttt{../processus.h}.
+\end{itemize}
+
+\section{Contact / Contributing}
+Feel free to open issues or PRs for adding algorithm implementations, improving visuals or GUI, or automating PDF generation via CI.
+
+\vfill
+
+\end{document}
