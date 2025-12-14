@@ -42,7 +42,7 @@ int getch() {
     return ch;
 }
 
-int menu_interactif(char *options[], int nombre_options) {
+int menu_interactif(char *options[], char *display[], int nombre_options) {
     int index_selection = 0;
     int ch;
 
@@ -52,16 +52,17 @@ int menu_interactif(char *options[], int nombre_options) {
 
         for (int i = 0; i < nombre_options; i++) {
             if (i == index_selection)
-                printf(" > \033[32m%s\033[0m\n", options[i]);
-            else
-                printf("   %s\n", options[i]);
-        }
+                printf(" > \033[32m%s\033[0m\n", display[i]);
+            else{
+                printf("   %s\n", display[i]);
+            }
+    }
 
         ch = getch();
 
         if (ch == '\n' || ch == '\r') {
             return index_selection;
-        } else if (ch == 27) { // Flèche
+        } else if (ch == 27) {
             if (getch() == '[') {
                 switch(getch()) {
                     case 'A': if (index_selection > 0) index_selection--; break;
@@ -107,12 +108,24 @@ int main(int argc, char *argv[]) {
     }
 
     char *options[50];
+    char *display[50];
     int nb_options = 0;
     struct dirent *entry;
 
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.') {
-            options[nb_options++] = strdup(entry->d_name);
+            options[nb_options] = strdup(entry->d_name);
+            /* build display name without .so extension */
+            char *dot = strrchr(entry->d_name, '.');
+            if (dot && strcmp(dot, ".so") == 0) {
+                size_t len = dot - entry->d_name;
+                display[nb_options] = malloc(len + 1);
+                strncpy(display[nb_options], entry->d_name, len);
+                display[nb_options][len] = '\0';
+            } else {
+                display[nb_options] = strdup(entry->d_name);
+            }
+            nb_options++;
         }
     }
     closedir(dir);
@@ -122,13 +135,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    options[nb_options++] = "Quitter";
+    options[nb_options] = "Quitter";
+    display[nb_options] = "Quitter";
+    nb_options++;
 
     while (1) {
         Processus procs[100];
         int n = lire_processus((char*)filename, procs);
 
-        int choix = menu_interactif(options, nb_options);
+        int choix = menu_interactif(options, display, nb_options);
         if (strcmp(options[choix], "Quitter") == 0) break;
 
         char path[256];
@@ -167,7 +182,10 @@ int main(int argc, char *argv[]) {
         getchar();
     }
 
-    for (int i = 0; i < nb_options - 1; i++) free(options[i]);
+    for (int i = 0; i < nb_options - 1; i++) {
+        free(options[i]);
+        free(display[i]);
+    }
 
     return 0;
 }
