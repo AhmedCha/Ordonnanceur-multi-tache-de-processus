@@ -1,17 +1,206 @@
-# Ordonnanceur-multi-tache-de-processus
-Projet ;)
+# Multi-Process Scheduler Simulator
 
-## Usage
-* **Clone repository** 
+A terminal-based simulator that visualizes various CPU process scheduling algorithms. This project demonstrates how different scheduling policies handle process execution, with support for both interactive terminal (TUI) and graphical (GUI) interfaces.
 
-`git clone https://github.com/AhmedCha/Ordonnanceur-multi-tache-de-processus.git`
+**Key Highlight:** The simulator dynamically loads scheduling algorithms at runtime, making it highly extensible without requiring recompilation of the core program.
 
-`cd Ordonnanceur-multi-tache-de-processus`
+## Features
 
-* Compile the C program
+- **Dual Interface Modes**
+  - **TUI (Terminal User Interface):** Interactive menu-driven terminal environment
+  - **GUI (Graphical User Interface):** Visual window-based interaction
+  
+- **Dynamic Algorithm Loading:** Scheduling algorithms are compiled as shared libraries and loaded at runtime, enabling easy extension with new algorithms
 
-`make`
+- **Interactive Visualization:** Real-time Gantt chart display with color-coded process execution timeline
 
-* Run the compiled code
+- **Pre-built Scheduling Algorithms:**
+  - **FIFO** (First-In, First-Out)
+  - **Priority-Based** (Preemptive scheduling)
+  - **MLFQ** (Multi-Level Feedback Queue)
+  - **Round Robin** (time-slice based)
+  - **Aging** (priority aging mechanism)
 
-`./main`
+## Getting Started
+
+### Prerequisites
+
+This project requires the following tools on a Linux/Unix-based system:
+
+- **GCC** (GNU Compiler Collection) - for compiling C code
+- **Make** - for build automation
+
+**Installation on Debian/Ubuntu:**
+```bash
+sudo apt-get update
+sudo apt-get install build-essential libgtk-3-dev
+```
+
+### Installation & Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/AhmedCha/Ordonnanceur-multi-tache-de-processus.git
+   cd Ordonnanceur-multi-tache-de-processus/src
+   ```
+
+2. **Compile the project:**
+   ```bash
+   make
+   ```
+   This generates the executable and compiles all scheduling algorithm modules.
+
+3. **Prepare your process file:**
+   Create or edit a process input file with one process per line. Each line must follow this format:
+   ```
+   process-name arrival-time execution-time initial-priority
+   ```
+   
+   **Example:** `processus.txt`
+   ```
+   P1 0 5 1
+   P2 1 3 2
+   P3 2 4 1
+   ```
+
+### Running the Simulator
+
+#### TUI Mode (Terminal Interface)
+Display results directly in the terminal with an interactive menu:
+```bash
+./main --tui processus.txt
+```
+
+#### GUI Mode (Graphical Interface)
+Open a graphical window for interaction:
+```bash
+./main --gui processus.txt
+```
+
+Or launch without a pre-loaded file:
+```bash
+./main
+```
+
+**Note:** The default launch without arguments requires you to load a process file through the GUI menu.
+
+### Usage Flow
+
+1. Launch the program with one of the commands above
+2. Select a scheduling algorithm from the interactive menu
+3. View the Gantt chart visualization showing process execution
+4. Compare results across different algorithms using the same process set
+
+
+## Extending the Scheduler
+
+The modular architecture makes it straightforward to add new scheduling algorithms.
+
+### Adding a New Algorithm
+
+1. **Create a new algorithm file:**
+   Add a `.c` file in the `src/politiques/` directory:
+   ```bash
+   touch src/politiques/my_algorithm.c
+   ```
+
+2. **Implement the scheduling function:**
+   Your file must include the header and implement the scheduling interface:
+   ```c
+   #include "../processus.h"
+
+   void ordonnancer(Processus T[], int n) {
+       // Your scheduling logic here
+       // T: array of processes
+       // n: number of processes
+   }
+   ```
+
+3. **Reference existing implementations:**
+   Review the algorithms in `src/politiques/` for structure and best practices:
+   - `fifo.c` - Simple queue-based scheduling
+   - `priorite.c` - Preemptive priority scheduling
+   - `round_robin.c` - Time-slice based scheduling
+   - `mlfq.c` - Advanced multi-queue approach
+   - `aging.c` - Dynamic priority management
+
+4. **Rebuild and run:**
+   ```bash
+   make
+   ./main --tui processus.txt
+   ```
+   Your new algorithm will automatically appear in the interactive menu.
+
+## Project Architecture
+
+### Directory Structure
+```
+src/
+├── main.c                    # Program entry point, menu system, library loading
+├── processus.h               # Core data structures (Processus struct, etc.)
+├── affichage.c               # Gantt chart generation and result display
+├── Interface_graphique.c     # GUI implementation files
+├── resultats_window.c        # Process execution metrics
+├── makefile                  # Build configuration
+├── politiques/               # Scheduling algorithm implementations
+│   ├── fifo.c
+│   ├── priorite.c
+│   ├── round_robin.c
+│   ├── mlfq.c
+│   └── aging.c
+├── processus.txt             # Example process input file
+└── build/                    # Compiled output (generated by make)
+    └── politiques/           # Compiled algorithm shared libraries
+```
+
+### Module Descriptions
+
+| File | Purpose |
+|------|---------|
+| `main.c` | Core application logic: CLI parsing, menu display, dynamic library loading |
+| `processus.h` | Header file containing `Processus` structure and shared constants |
+| `affichage.c` | Gantt chart rendering and terminal output formatting |
+| `Interface_graphique.c` |  handles user input, scheduling selection, and real-time visualization of process execution  |
+| `resultats_window.c` |  Handle process execution results and metrics  |
+| `politiques/*.c` | Individual scheduling algorithm implementations |
+
+### Build Process
+
+The makefile automates:
+- Compilation of main program components
+- Dynamic compilation of each algorithm into separate shared libraries
+- Placement of compiled libraries in `build/politiques/`
+- Linking and executable generation
+
+## Troubleshooting
+
+### Common Issues
+
+**"make: command not found"**
+- Install build tools: `sudo apt-get install build-essential`
+
+**"Permission denied" when running ./main**
+- Ensure the executable is in the correct location and has execute permissions:
+  ```bash
+  chmod +x main
+  ```
+
+**Process file not found**
+- Verify the file path is correct and relative to the `src/` directory
+- Use absolute paths if relative paths cause issues
+
+**Compilation errors in politiques/**
+- Ensure all algorithm files have the required `ordonnancer()` function
+- Check that they include `../processus.h`
+
+## Contributing
+
+Contributions are welcome! Feel free to:
+- Add new scheduling algorithms
+- Improve the GUI/TUI interface
+- Enhance visualization features
+- Fix bugs or improve documentation
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
