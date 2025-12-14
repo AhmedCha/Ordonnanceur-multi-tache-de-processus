@@ -7,7 +7,6 @@
 #include <dlfcn.h>
 #include <math.h>
 #include "processus.h"
-#include "resultats_window.h"
 
 enum { COL_NOM, COL_ARRIVEE, COL_DUREE, COL_PRIORITE, NUM_COLS };
 
@@ -23,6 +22,8 @@ static GList *row_widgets = NULL;
 int global_quantum = 4;
 
 void build_table(void);
+
+void afficher_fenetre_resultats(Processus processus_list[], int num_processus);
 
 int temps_actuel = 0, temps_max = 0;
 gboolean animation_en_cours = FALSE, algo_lance = FALSE;
@@ -619,6 +620,8 @@ void launch_gui(int argc, char *argv[], const char* filename) {
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(quantum_spin_button), 4);
     g_signal_connect(quantum_spin_button, "value-changed", G_CALLBACK(on_quantum_changed), NULL);
     gtk_box_pack_start(GTK_BOX(top_bar), quantum_spin_button, FALSE, FALSE, 0);
+    gtk_widget_set_no_show_all(quantum_spin_button, TRUE);
+    gtk_widget_set_visible(quantum_spin_button, FALSE);
 
     GtkWidget *run_btn = gtk_button_new_with_label("Lancer l'algorithme");
     g_signal_connect(run_btn, "clicked", G_CALLBACK(run_scheduler_callback), NULL);
