@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 #include <math.h>
 #include "processus.h"
+#include "resultats_window.h"
 
 enum { COL_NOM, COL_ARRIVEE, COL_DUREE, COL_PRIORITE, NUM_COLS };
 
@@ -407,6 +408,8 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     update_gantt_size();
     g_timeout_add(200, animer, NULL);
     gtk_widget_queue_draw(gantt_drawing_area);
+
+    afficher_fenetre_resultats(processus_list, num_processus);
 
     dlclose(handle);
 }
