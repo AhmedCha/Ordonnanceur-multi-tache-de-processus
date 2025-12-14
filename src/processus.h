@@ -28,4 +28,4 @@ typedef struct {
 
 void afficher_resultats(Processus tableau_processus[], int nombre_processus);
 
-#endif // PROCESSUS_H
+#endif
