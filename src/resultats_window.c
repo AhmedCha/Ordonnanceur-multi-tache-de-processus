@@ -10,20 +10,17 @@ static void on_resultats_window_destroy(GtkWidget *widget, gpointer data) {
 }
 
 void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
-    // Si la fenêtre existe déjà, la détruire
     if (resultats_window) {
         gtk_widget_destroy(resultats_window);
         resultats_window = NULL;
     }
 
-    // Créer une nouvelle fenêtre
     resultats_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(resultats_window), "Résultats de l'Ordonnancement");
     gtk_window_set_default_size(GTK_WINDOW(resultats_window), 600, 500);
     gtk_window_set_position(GTK_WINDOW(resultats_window), GTK_WIN_POS_CENTER);
     g_signal_connect(resultats_window, "destroy", G_CALLBACK(on_resultats_window_destroy), NULL);
 
-    // CSS pour le style
     GtkCssProvider *css_provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css_provider,
         "window { background: #f5f7fa; font-family: 'Segoe UI', sans-serif; }"
@@ -42,11 +39,9 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
                                               GTK_STYLE_PROVIDER(css_provider),
                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    // Box principal
     GtkWidget *main_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(resultats_window), main_vbox);
 
-    // En-tête avec titre
     GtkWidget *header_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_name(header_box, "header_box");
     
@@ -55,14 +50,9 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
     gtk_label_set_xalign(GTK_LABEL(title_label), 0.5);
     gtk_box_pack_start(GTK_BOX(header_box), title_label, FALSE, FALSE, 0);
     
-    GtkWidget *subtitle_label = gtk_label_new("Temps d'Arrivée et de Sortie des Processus");
-    gtk_widget_set_name(subtitle_label, "subtitle_label");
-    gtk_label_set_xalign(GTK_LABEL(subtitle_label), 0.5);
-    gtk_box_pack_start(GTK_BOX(header_box), subtitle_label, FALSE, FALSE, 0);
     
     gtk_box_pack_start(GTK_BOX(main_vbox), header_box, FALSE, FALSE, 0);
 
-    // Zone de défilement pour le tableau
     GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), 
                                    GTK_POLICY_AUTOMATIC, 
@@ -72,11 +62,9 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
     gtk_widget_set_margin_top(scrolled_window, 12);
     gtk_box_pack_start(GTK_BOX(main_vbox), scrolled_window, TRUE, TRUE, 0);
 
-    // Container pour le tableau
     GtkWidget *table_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(scrolled_window), table_vbox);
 
-    // En-tête du tableau
     GtkWidget *header_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_name(header_row, "table_header");
     gtk_box_set_homogeneous(GTK_BOX(header_row), TRUE);
@@ -89,26 +77,22 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
     }
     gtk_box_pack_start(GTK_BOX(table_vbox), header_row, FALSE, FALSE, 0);
 
-    // Lignes de données
     int temps_total = 0;
     for (int i = 0; i < num_processus; i++) {
         GtkWidget *data_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
         gtk_widget_set_name(data_row, "table_row");
         gtk_box_set_homogeneous(GTK_BOX(data_row), TRUE);
         
-        // Nom du processus
         GtkWidget *nom_label = gtk_label_new(processus_list[i].nom);
         gtk_label_set_xalign(GTK_LABEL(nom_label), 0.5);
         gtk_box_pack_start(GTK_BOX(data_row), nom_label, TRUE, TRUE, 8);
         
-        // Temps d'arrivée
         char arrivee_str[32];
         snprintf(arrivee_str, sizeof(arrivee_str), "%d", processus_list[i].arrivee);
         GtkWidget *arrivee_label = gtk_label_new(arrivee_str);
         gtk_label_set_xalign(GTK_LABEL(arrivee_label), 0.5);
         gtk_box_pack_start(GTK_BOX(data_row), arrivee_label, TRUE, TRUE, 8);
         
-        // Temps de sortie
         char sortie_str[32];
         snprintf(sortie_str, sizeof(sortie_str), "%d", processus_list[i].temps_sortie);
         GtkWidget *sortie_label = gtk_label_new(sortie_str);
@@ -117,13 +101,25 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
         
         gtk_box_pack_start(GTK_BOX(table_vbox), data_row, FALSE, FALSE, 0);
         
-        // Calculer le temps total
         if (processus_list[i].temps_sortie > temps_total) {
             temps_total = processus_list[i].temps_sortie;
         }
     }
 
-    // Boîte de statistiques
+    double temps_rotation_total = 0.0;
+    double temps_attente_total = 0.0;
+    
+    for (int i = 0; i < num_processus; i++) {
+        int temps_rotation = processus_list[i].temps_sortie - processus_list[i].arrivee;
+        temps_rotation_total += temps_rotation;
+        
+        int temps_attente = temps_rotation - processus_list[i].duree;
+        temps_attente_total += temps_attente;
+    }
+    
+    double temps_rotation_moyen = (num_processus > 0) ? (temps_rotation_total / num_processus) : 0.0;
+    double temps_attente_moyen = (num_processus > 0) ? (temps_attente_total / num_processus) : 0.0;
+
     GtkWidget *stats_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_name(stats_box, "stats_box");
     
@@ -142,7 +138,6 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
     
     gtk_box_pack_start(GTK_BOX(stats_box), stats_title, FALSE, FALSE, 0);
     
-    // Nombre de processus
     char nb_processus_str[128];
     snprintf(nb_processus_str, sizeof(nb_processus_str), "Nombre de processus: %d", num_processus);
     GtkWidget *nb_processus_label = gtk_label_new(nb_processus_str);
@@ -150,17 +145,29 @@ void afficher_fenetre_resultats(Processus processus_list[], int num_processus) {
     gtk_label_set_xalign(GTK_LABEL(nb_processus_label), 0.0);
     gtk_box_pack_start(GTK_BOX(stats_box), nb_processus_label, FALSE, FALSE, 0);
     
-    // Temps total d'exécution
     char temps_total_str[128];
-    snprintf(temps_total_str, sizeof(temps_total_str), "Temps total d'exécution: %d unités", temps_total);
+    snprintf(temps_total_str, sizeof(temps_total_str), "Temps total d'exécution: %d seconde(s)", temps_total);
     GtkWidget *temps_total_label = gtk_label_new(temps_total_str);
     gtk_widget_set_name(temps_total_label, "stats_label");
     gtk_label_set_xalign(GTK_LABEL(temps_total_label), 0.0);
     gtk_box_pack_start(GTK_BOX(stats_box), temps_total_label, FALSE, FALSE, 0);
     
+    char temps_rotation_str[128];
+    snprintf(temps_rotation_str, sizeof(temps_rotation_str), "Temps de rotation moyen: %.2f seconde(s)", temps_rotation_moyen);
+    GtkWidget *temps_rotation_label = gtk_label_new(temps_rotation_str);
+    gtk_widget_set_name(temps_rotation_label, "stats_label");
+    gtk_label_set_xalign(GTK_LABEL(temps_rotation_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(stats_box), temps_rotation_label, FALSE, FALSE, 0);
+    
+    char temps_attente_str[128];
+    snprintf(temps_attente_str, sizeof(temps_attente_str), "Temps d'attente moyen: %.2f seconde(s)", temps_attente_moyen);
+    GtkWidget *temps_attente_label = gtk_label_new(temps_attente_str);
+    gtk_widget_set_name(temps_attente_label, "stats_label");
+    gtk_label_set_xalign(GTK_LABEL(temps_attente_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(stats_box), temps_attente_label, FALSE, FALSE, 0);
+    
     gtk_box_pack_start(GTK_BOX(main_vbox), stats_box, FALSE, FALSE, 0);
 
-    // Bouton de fermeture
     GtkWidget *close_button = gtk_button_new_with_label("Fermer");
     gtk_widget_set_margin_start(close_button, 12);
     gtk_widget_set_margin_end(close_button, 12);
