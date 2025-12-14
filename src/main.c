@@ -32,19 +32,19 @@ int lire_processus(char *chemin_fichier, Processus tableau_processus[]) {
 
 int getch() {
     struct termios oldt, newt;
-    int ch;
+    int caractere_lu;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    ch = getchar();
+    caractere_lu = getchar();
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    return ch;
+    return caractere_lu;
 }
 
 int menu_interactif(char *options[], char *display[], int nombre_options) {
     int index_selection = 0;
-    int ch;
+    int caractere_lu;
 
     while (1) {
         system("clear");
@@ -58,11 +58,11 @@ int menu_interactif(char *options[], char *display[], int nombre_options) {
             }
     }
 
-        ch = getch();
+        caractere_lu = getch();
 
-        if (ch == '\n' || ch == '\r') {
+        if (caractere_lu == '\n' || caractere_lu == '\r') {
             return index_selection;
-        } else if (ch == 27) {
+        } else if (caractere_lu == 27) {
             if (getch() == '[') {
                 switch(getch()) {
                     case 'A': if (index_selection > 0) index_selection--; break;
