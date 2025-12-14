@@ -140,6 +140,7 @@ src/
 ├── processus.h               # Core data structures (Processus struct, etc.)
 ├── affichage.c               # Gantt chart generation and result display
 ├── Interface_graphique.c     # GUI implementation files
+├── resultats_window.c        # Process execution metrics
 ├── makefile                  # Build configuration
 ├── politiques/               # Scheduling algorithm implementations
 │   ├── fifo.c
@@ -160,6 +161,7 @@ src/
 | `processus.h` | Header file containing `Processus` structure and shared constants |
 | `affichage.c` | Gantt chart rendering and terminal output formatting |
 | `Interface_graphique.c` |  handles user input, scheduling selection, and real-time visualization of process execution  |
+| `resultats_window.c` |  Handle process execution results and metrics  |
 | `politiques/*.c` | Individual scheduling algorithm implementations |
 
 ### Build Process
