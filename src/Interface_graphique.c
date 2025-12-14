@@ -40,6 +40,7 @@ static gboolean animer(gpointer data G_GNUC_UNUSED) {
     temps_actuel += 2;
     if (temps_actuel > temps_max + 20) {
         animation_en_cours = FALSE;
+        afficher_fenetre_resultats(processus_list, num_processus);
         return FALSE;
     }
     gtk_widget_queue_draw(gantt_drawing_area);
@@ -408,8 +409,6 @@ void run_scheduler_callback(GtkButton *button G_GNUC_UNUSED, gpointer user_data 
     update_gantt_size();
     g_timeout_add(200, animer, NULL);
     gtk_widget_queue_draw(gantt_drawing_area);
-
-    afficher_fenetre_resultats(processus_list, num_processus);
 
     dlclose(handle);
 }
