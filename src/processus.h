@@ -1,7 +1,7 @@
 #ifndef PROCESSUS_H
 #define PROCESSUS_H
 
-#define MAX_SEGMENTS_GANTT 50
+#define MAX_SEGMENTS_GANTT 250
 
 typedef struct {
     int debut;
@@ -13,15 +13,19 @@ typedef struct {
     int arrivee;
     int duree;
     int priorite;
-    int restant;
-    int temps_debut;    
 
+    int restant;
+    int temps_debut;
     int temps_sortie;
+
     Segment_Diagramme_Gantt diagramme_gantt[MAX_SEGMENTS_GANTT];
     int nb_segments;
+
+    int temps_attente;
+    int priorite_dynamique;
+    int dernier_boost;
 } Processus;
 
-void ordonnancer(Processus tableau_processus[], int nombre_processus);
 void afficher_resultats(Processus tableau_processus[], int nombre_processus);
 
-#endif
+#endif 

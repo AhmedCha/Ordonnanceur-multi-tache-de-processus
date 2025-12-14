@@ -18,7 +18,6 @@ typedef struct {
     int quantums[NUM_QUEUES];
 } OrdonnanceurMLFQ;
 
-
 OrdonnanceurMLFQ* mlfq_creer() {
     OrdonnanceurMLFQ* ordonnanceur = malloc(sizeof(OrdonnanceurMLFQ));
     

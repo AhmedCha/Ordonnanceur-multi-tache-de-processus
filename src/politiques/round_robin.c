@@ -1,20 +1,17 @@
 #include <stdio.h>
 #include "../processus.h"
 
-void vider_tampon_entree() {
-    int caractere;
-    while ((caractere = getchar()) != '\n' && caractere != EOF) { }
-}
-void ordonnancer(Processus tableau_processus[], int nombre_processus) {
-    int quantum;
-    printf("===== Ordonnancement Round Robin =====\n");
-    printf("Entrez la valeur du quantum : ");
-    if (scanf("%d", &quantum) != 1 || quantum <= 0) {
-        printf("Quantum invalide.\n");
-        vider_tampon_entree();
-        return;
+static int quantum_rr = 4;
+
+void definir_quantum(int q) {
+    if (q > 0) {
+        quantum_rr = q;
     }
-    vider_tampon_entree();
+}
+
+void ordonnancer(Processus tableau_processus[], int nombre_processus) {
+    int quantum = quantum_rr;
+    printf("===== Ordonnancement Round Robin (Quantum: %d) =====\n", quantum);
 
     int temps_restant[nombre_processus];
     for (int i = 0; i < nombre_processus; i++) {
@@ -56,11 +53,34 @@ void ordonnancer(Processus tableau_processus[], int nombre_processus) {
 
     while (nb_termines < nombre_processus) {
         if (debut == fin) {
-            temps++;
+            int prochain_arrivee = -1;
             for (int j = 0; j < nombre_processus; j++) {
-                if (tableau_processus[j].arrivee == temps && temps_restant[j] > 0) {
-                    file_attente[fin] = j;
-                    fin = (fin + 1) % TAILLE_FILE;
+                if (temps_restant[j] > 0) {
+                    if (prochain_arrivee == -1 || tableau_processus[j].arrivee < prochain_arrivee) {
+                        prochain_arrivee = tableau_processus[j].arrivee;
+                    }
+                }
+            }
+            
+            if (prochain_arrivee != -1 && temps < prochain_arrivee) {
+                temps = prochain_arrivee;
+            } else {
+                 temps++;
+            }
+
+            for (int j = 0; j < nombre_processus; j++) {
+                if (tableau_processus[j].arrivee <= temps && temps_restant[j] > 0) {
+                    int present = 0;
+                    for(int k = debut; k != fin; k = (k+1)%TAILLE_FILE) {
+                        if(file_attente[k] == j) {
+                            present = 1;
+                            break;
+                        }
+                    }
+                    if(!present) {
+                       file_attente[fin] = j;
+                       fin = (fin + 1) % TAILLE_FILE;
+                    }
                 }
             }
             continue;
