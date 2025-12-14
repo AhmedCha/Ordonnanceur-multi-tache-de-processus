@@ -1,88 +1,206 @@
 # Multi-Process Scheduler Simulator
 
-This project is a terminal-based simulator for various processus scheduling algorithms. It provides a clear and interactive way to visualize how different scheduling policies handle a set of processes. The simulator dynamically loads scheduling algorithms from shared libraries, making it easily extensible.
+A terminal-based simulator that visualizes various CPU process scheduling algorithms. This project demonstrates how different scheduling policies handle process execution, with support for both interactive terminal (TUI) and graphical (GUI) interfaces.
+
+**Key Highlight:** The simulator dynamically loads scheduling algorithms at runtime, making it highly extensible without requiring recompilation of the core program.
 
 ## Features
 
-*   **Interactive TUI:** A simple and intuitive terminal menu to select and run different scheduling algorithms.
-*   **Dynamic Algorithm Loading:** Scheduling algorithms are compiled as shared libraries and loaded at runtime, allowing for easy addition of new algorithms without recompiling the main program.
-*   **Gantt Chart Visualization:** Generates a colored Gantt chart in the terminal to visualize the execution timeline of the processes.
-*   **Included Scheduling Algorithms:**
-    *   First-In, First-Out (FIFO)
-    *   Priority-Based (Preemptive)
-    *   Multi-level Feedback Queue (MLFQ)
-    *   Round Robin
-    *   Aging
+- **Dual Interface Modes**
+  - **TUI (Terminal User Interface):** Interactive menu-driven terminal environment
+  - **GUI (Graphical User Interface):** Visual window-based interaction
+  
+- **Dynamic Algorithm Loading:** Scheduling algorithms are compiled as shared libraries and loaded at runtime, enabling easy extension with new algorithms
 
-## Installation and Usage
+- **Interactive Visualization:** Real-time Gantt chart display with color-coded process execution timeline
+
+- **Pre-built Scheduling Algorithms:**
+  - **FIFO** (First-In, First-Out)
+  - **Priority-Based** (Preemptive scheduling)
+  - **MLFQ** (Multi-Level Feedback Queue)
+  - **Round Robin** (time-slice based)
+  - **Aging** (priority aging mechanism)
+
+## Getting Started
 
 ### Prerequisites
 
-Before compiling the code, you need to have the following installed on your Linux machine:
+This project requires the following tools on a Linux/Unix-based system:
 
-*   **GCC (GNU Compiler Collection)**
-*   **Make**
+- **GCC** (GNU Compiler Collection) - for compiling C code
+- **Make** - for build automation
 
-You can install these using your distribution's package manager. For example, on Debian-based systems (like Ubuntu):
+**Installation on Debian/Ubuntu:**
+```bash
+sudo apt-get update
+sudo apt-get install build-essential
+```
 
-`sudo apt-get update && sudo apt-get install build-essential`
+### Installation & Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/AhmedCha/Ordonnanceur-multi-tache-de-processus.git
+   cd Ordonnanceur-multi-tache-de-processus/src
+   ```
+
+2. **Compile the project:**
+   ```bash
+   make
+   ```
+   This generates the executable and compiles all scheduling algorithm modules.
+
+3. **Prepare your process file:**
+   Create or edit a process input file with one process per line. Each line must follow this format:
+   ```
+   process-name arrival-time execution-time initial-priority
+   ```
+   
+   **Example:** `processus.txt`
+   ```
+   P1 0 5 1
+   P2 1 3 2
+   P3 2 4 1
+   ```
 
 ### Running the Simulator
 
-1.  **Clone the repository:**
-    `git clone https://github.com/AhmedCha/Ordonnanceur-multi-tache-de-processus.git`
-    `cd Ordonnanceur-multi-tache-de-processus/src`
+#### TUI Mode (Terminal Interface)
+Display results directly in the terminal with an interactive menu:
+```bash
+./main --tui processus.txt
+```
 
-2.  **Compile the project:**
-    `make`
+#### GUI Mode (Graphical Interface)
+Open a graphical window for interaction:
+```bash
+./main --gui processus.txt
+```
 
-3.  **Create a process file:**
-    This file defines the processes to be scheduled. Each line must follow this format:
-    `process-name arrival-time execution-time initial-priority`
+Or launch without a pre-loaded file:
+```bash
+./main
+```
 
-    An example file, `processus.txt`, is provided in the `src` directory.
+**Note:** The default launch without arguments requires you to load a process file through the GUI menu.
 
-4.  **Run the simulator:**
-    `./main <process_file>`
+### Usage Flow
 
-    **Example:**
-    `./main processus.txt`
+1. Launch the program with one of the commands above
+2. Select a scheduling algorithm from the interactive menu
+3. View the Gantt chart visualization showing process execution
+4. Compare results across different algorithms using the same process set
 
-5.  **Interactive Menu:**
-    After running the command, an interactive menu will appear, allowing you to choose the desired scheduling algorithm.
 
-    *![Screenshot of the interactive menu](./screenshots/menu.png)*
+## Extending the Scheduler
 
-## How to Add a New Scheduling Algorithm
+The modular architecture makes it straightforward to add new scheduling algorithms.
 
-The scheduler is designed to be easily extensible. To add a new algorithm:
+### Adding a New Algorithm
 
-1.  **Create a C file:**
-    Create a new `.c` file in the `src/politiques/` directory (e.g., `my_algorithm.c`).
+1. **Create a new algorithm file:**
+   Add a `.c` file in the `src/politiques/` directory:
+   ```bash
+   touch src/politiques/my_algorithm.c
+   ```
 
-2.  **Implement the `ordonnancer` function:**
-    Your new file must include `../processus.h` and implement the following function:
-    `void ordonnancer(Processus T[], int n)`
-    *   `T` is an array of `Processus` structs.
-    *   `n` is the number of processes.
+2. **Implement the scheduling function:**
+   Your file must include the header and implement the scheduling interface:
+   ```c
+   #include "../processus.h"
 
-    This function should contain your scheduling logic. You can refer to the existing files in `src/politiques/` for examples.
+   void ordonnancer(Processus T[], int n) {
+       // Your scheduling logic here
+       // T: array of processes
+       // n: number of processes
+   }
+   ```
 
-3.  **Compile and Run:**
-    Simply run `make` in the `src` directory. The makefile is configured to automatically find and compile any new `.c` files in the `src/politiques/` directory into the `build/politiques/` folder. The main program will then detect and load your new algorithm.
+3. **Reference existing implementations:**
+   Review the algorithms in `src/politiques/` for structure and best practices:
+   - `fifo.c` - Simple queue-based scheduling
+   - `priorite.c` - Preemptive priority scheduling
+   - `round_robin.c` - Time-slice based scheduling
+   - `mlfq.c` - Advanced multi-queue approach
+   - `aging.c` - Dynamic priority management
 
-## Project Structure
+4. **Rebuild and run:**
+   ```bash
+   make
+   ./main --tui processus.txt
+   ```
+   Your new algorithm will automatically appear in the interactive menu.
 
-*   `src/main.c`: The main entry point of the program. Handles menu display, dynamic loading of libraries, and user interaction.
-*   `src/processus.h`: Header file defining the `Processus` struct and other shared data structures.
-*   `src/affichage.c`: Contains the logic for generating and displaying the Gantt chart and other results.
-*   `src/politiques/`: Directory containing the source code for the different scheduling algorithms. Each file is a separate, dynamically loaded module.
-*   `src/makefile`: The makefile for compiling the project.
-*   `build/`: Directory where the compiled executable and shared libraries are placed. (This directory is created by the makefile).
+## Project Architecture
 
-## Acknowledgments
+### Directory Structure
+```
+src/
+├── main.c                 # Program entry point, menu system, library loading
+├── processus.h            # Core data structures (Processus struct, etc.)
+├── affichage.c            # Gantt chart generation and result display
+├── Interface_graphique*   # GUI implementation files
+├── makefile              # Build configuration
+├── politiques/           # Scheduling algorithm implementations
+│   ├── fifo.c
+│   ├── priorite.c
+│   ├── round_robin.c
+│   ├── mlfq.c
+│   └── aging.c
+├── processus.txt         # Example process input file
+└── build/               # Compiled output (generated by make)
+    └── politiques/      # Compiled algorithm shared libraries
+```
 
-This project was developed with the assistance of several AI code generation tools, including OpenAI's ChatGPT, Google's Gemini, and others. Their support was instrumental in the development process.
+### Module Descriptions
+
+| File | Purpose |
+|------|---------|
+| `main.c` | Core application logic: CLI parsing, menu display, dynamic library loading |
+| `processus.h` | Header file containing `Processus` structure and shared constants |
+| `affichage.c` | Gantt chart rendering and terminal output formatting |
+| `politiques/*.c` | Individual scheduling algorithm implementations |
+
+### Build Process
+
+The makefile automates:
+- Compilation of main program components
+- Dynamic compilation of each algorithm into separate shared libraries
+- Placement of compiled libraries in `build/politiques/`
+- Linking and executable generation
+
+## Troubleshooting
+
+### Common Issues
+
+**"make: command not found"**
+- Install build tools: `sudo apt-get install build-essential`
+
+**"Permission denied" when running ./main**
+- Ensure the executable is in the correct location and has execute permissions:
+  ```bash
+  chmod +x main
+  ```
+
+**Process file not found**
+- Verify the file path is correct and relative to the `src/` directory
+- Use absolute paths if relative paths cause issues
+
+**Compilation errors in politiques/**
+- Ensure all algorithm files have the required `ordonnancer()` function
+- Check that they include `../processus.h`
+
+## Contributing
+
+Contributions are welcome! Feel free to:
+- Add new scheduling algorithms
+- Improve the GUI/TUI interface
+- Enhance visualization features
+- Fix bugs or improve documentation
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## License
 
