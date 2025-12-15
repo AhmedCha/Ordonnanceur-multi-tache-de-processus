@@ -115,7 +115,6 @@ int main(int argc, char *argv[]) {
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, ".so") && entry->d_name[0] != '.') {
             options[nb_options] = strdup(entry->d_name);
-            /* build display name without .so extension */
             char *dot = strrchr(entry->d_name, '.');
             if (dot && strcmp(dot, ".so") == 0) {
                 size_t len = dot - entry->d_name;
