@@ -1,39 +1,52 @@
-GTK_CFLAGS = $(shell pkg-config --cflags gtk+-3.0)
-GTK_LIBS   = $(shell pkg-config --libs gtk+-3.0)
+CC          = gcc
+CFLAGS      = -Wall -Wextra
+GTK_CFLAGS  = $(shell pkg-config --cflags gtk+-3.0)
+GTK_LIBS    = $(shell pkg-config --libs gtk+-3.0)
+LDFLAGS     = -ldl -lm
+
+BUILD_DIR       = build
+POL_BUILD_DIR   = $(BUILD_DIR)/politiques
 
 SRCS = $(wildcard *.c)
 POL_SRCS = $(wildcard politiques/*.c)
-POL_LIBS = $(patsubst politiques/%.c,build/politiques/%.so,$(POL_SRCS))
 
+MAIN_OBJS = \
+	$(BUILD_DIR)/main.o \
+	$(BUILD_DIR)/affichage.o \
+	$(BUILD_DIR)/interface_graphique.o \
+	$(BUILD_DIR)/resultats_window.o
+
+POL_LIBS = $(patsubst politiques/%.c,$(POL_BUILD_DIR)/%.so,$(POL_SRCS))
+	
 all: main $(POL_LIBS)
 
-build/politiques:
-	mkdir -p build/politiques
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-MAIN_OBJS = main.o affichage.o interface_graphique.o resultats_window.o
+$(POL_BUILD_DIR):
+	mkdir -p $(POL_BUILD_DIR)
 
 main: $(MAIN_OBJS)
-	gcc -Wall -Wextra -o $@ $^ -ldl $(GTK_LIBS) -lm
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(GTK_LIBS)
 
-main.o: main.c processus.h
-	gcc -Wall -Wextra -c $< $(GTK_CFLAGS)
+$(BUILD_DIR)/main.o: main.c processus.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
-affichage.o: affichage.c processus.h
-	gcc -Wall -Wextra -c $<
+$(BUILD_DIR)/affichage.o: affichage.c processus.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-interface_graphique.o: interface_graphique.c processus.h
-	gcc -Wall -Wextra -c $< $(GTK_CFLAGS)
+$(BUILD_DIR)/interface_graphique.o: interface_graphique.c processus.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
-resultats_window.o: resultats_window.c processus.h
-	gcc -Wall -Wextra -c $< $(GTK_CFLAGS)
+$(BUILD_DIR)/resultats_window.o: resultats_window.c processus.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
-build/politiques/%.so: politiques/%.c processus.h | build/politiques
-	gcc -Wall -Wextra -fPIC -shared -o $@ $< -I..
+$(POL_BUILD_DIR)/%.so: politiques/%.c processus.h | $(POL_BUILD_DIR)
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ $< -I..
 
 clean:
-	rm -f main $(MAIN_OBJS)
-	rm -rf build
-	rm -f politiques/*.o
+	rm -f main
+	rm -rf $(BUILD_DIR)
 
 re: clean all
 
